@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react'
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import { Keypair, PublicKey } from '@solana/web3.js'
 import { TokenService, TokenMintParams } from '@/lib/token-service'
+import { MeteoraService, PoolCreationParams } from '@/lib/meteora-service'
 import { toast } from 'sonner'
 
 export interface TokenMintFormData {
@@ -23,12 +24,26 @@ export interface TokenMintFormData {
   teamMultisigPDA?: string
 }
 
+export interface LPPoolParams {
+  createLPPool: boolean
+  poolType: 'DLMM' | 'DBC'
+  quoteMint: string
+  quoteDecimals: number
+  baseAmount: number
+  quoteAmount: number
+  feeRate: number
+  tickSpacing: number
+  antiSniper: boolean
+  sniperProtectionDelay: number
+}
+
 export interface TokenMintState {
   isLoading: boolean
   error: string | null
   success: boolean
   mintAddress: string | null
   signature: string | null
+  poolResult?: import('@/lib/meteora-service').PoolCreationResult // LP pool creation result
 }
 
 export function useTokenMinting() {
@@ -89,7 +104,7 @@ export function useTokenMinting() {
     })
   }, [])
 
-  const createToken = useCallback(async (formData: TokenMintFormData) => {
+  const createToken = useCallback(async (formData: TokenMintFormData, lpPoolParams?: LPPoolParams) => {
     if (!publicKey || !signTransaction || !signAllTransactions) {
       setState(prev => ({ ...prev, error: 'Wallet not connected or does not support signing' }))
       return
@@ -214,17 +229,66 @@ export function useTokenMinting() {
         }
       }
 
+      // If LP pool creation is requested, create the pool
+      let poolResult: import('@/lib/meteora-service').PoolCreationResult | undefined = undefined
+      if (lpPoolParams?.createLPPool) {
+        try {
+          toast.info('Creating liquidity pool for your token...')
+          
+          // Validate LP pool parameters
+          if (!lpPoolParams.quoteMint.trim()) {
+            throw new Error('Quote token mint address is required for LP pool creation')
+          }
+
+          // Check if user has sufficient balance for pool creation fee
+          const poolCreationFee = MeteoraService.getPoolCreationFee()
+          if (balance < (mintFee + poolCreationFee) * 1e9) {
+            throw new Error(`Insufficient balance for token + LP pool creation. Required: ${mintFee + poolCreationFee} SOL`)
+          }
+
+          // Create LP pool parameters
+          const poolParams: PoolCreationParams = {
+            connection,
+            payer: publicKey,
+            baseMint: result.mint,
+            quoteMint: new PublicKey(lpPoolParams.quoteMint.trim()),
+            baseDecimals: formData.decimals,
+            quoteDecimals: lpPoolParams.quoteDecimals,
+            baseAmount: lpPoolParams.baseAmount,
+            quoteAmount: lpPoolParams.quoteAmount,
+            feeRate: lpPoolParams.feeRate,
+            tickSpacing: lpPoolParams.tickSpacing,
+            poolType: lpPoolParams.poolType,
+            antiSniper: lpPoolParams.antiSniper,
+            sniperProtectionDelay: lpPoolParams.sniperProtectionDelay,
+          }
+
+          // Create the LP pool
+          poolResult = await MeteoraService.createPool(poolParams)
+          
+          toast.success('Liquidity pool created successfully!')
+        } catch (error) {
+          console.error('LP Pool creation failed:', error)
+          toast.warning('Token created successfully, but LP Pool creation failed')
+        }
+      }
+
       setState({
         isLoading: false,
         error: null,
         success: true,
         mintAddress: result.mint.toString(),
         signature: signature,
+        poolResult: poolResult,
       })
 
-      toast.success('Token created successfully!')
+      if (poolResult) {
+        toast.success('Token and LP Pool created successfully!')
+      } else {
+        toast.success('Token created successfully!')
+      }
       
-      return result
+      return { ...result, poolResult }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
       setState(prev => ({
