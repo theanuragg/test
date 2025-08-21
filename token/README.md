@@ -3,7 +3,7 @@
 This is a Next.js app containing:
 
 - Tailwind CSS setup for styling
-- Useful wallet UI elements setup using [Gill](https://gill.site/)
+- Useful wallet UI elements setup using [@solana/web3.js](https://www.npmjs.com/package/@solana/web3.js)
 
 ## Getting Started
 
@@ -12,7 +12,7 @@ This is a Next.js app containing:
 #### Download the template
 
 ```shell
-pnpm create solana-dapp@latest -t gh:solana-foundation/templates/gill/token
+pnpm create solana-dapp@latest -t gh:solana-foundation/templates/web3js/token
 ```
 
 #### Install Dependencies
