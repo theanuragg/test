@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { z } from 'zod';
@@ -25,6 +25,148 @@ interface FormValues {
   tokenLogo: File | undefined;
   website?: string;
   twitter?: string;
+}
+
+// Separate component for image input to avoid hooks violation
+function ImageInput({ field }: { field: any }) {
+  const [preview, setPreview] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const validateFile = useCallback((file: File): boolean => {
+    // Check file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/svg+xml'];
+    if (!allowedTypes.includes(file.type)) {
+      setError('Please select a valid image file (PNG, JPG, or SVG)');
+      return false;
+    }
+
+    // Check file size (2MB = 2 * 1024 * 1024 bytes)
+    const maxSize = 2 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setError('File size must be less than 2MB');
+      return false;
+    }
+
+    setError(null);
+    return true;
+  }, []);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (validateFile(file)) {
+        field.handleChange(file);
+        
+        // Create preview
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setPreview(e.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        // Clear the input
+        e.target.value = '';
+        field.handleChange(undefined);
+        setPreview(null);
+      }
+    }
+  }, [field, validateFile]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const file = files[0];
+      if (validateFile(file)) {
+        field.handleChange(file);
+        
+        // Create preview
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setPreview(e.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+  }, [field, validateFile]);
+
+  const handleRemove = useCallback(() => {
+    setPreview(null);
+    field.handleChange(undefined);
+    const input = document.getElementById('tokenLogo') as HTMLInputElement;
+    if (input) input.value = '';
+  }, [field]);
+
+  return (
+    <div>
+      <div 
+        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+          isDragOver 
+            ? 'border-blue-400 bg-blue-400/10' 
+            : 'border-white/20'
+        }`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {preview ? (
+          <div className="space-y-4">
+            <img 
+              src={preview} 
+              alt="Preview" 
+              className="w-24 h-24 mx-auto rounded-lg object-cover"
+            />
+            <p className="text-green-400 text-sm">
+              {field.state.value?.name} ({field.state.value?.size ? (field.state.value.size / 1024 / 1024).toFixed(2) : '0'}MB)
+            </p>
+            <button
+              type="button"
+              onClick={handleRemove}
+              className="text-red-400 text-sm hover:text-red-300"
+            >
+              Remove
+            </button>
+          </div>
+        ) : (
+          <>
+            <span className="iconify w-6 h-6 mx-auto mb-2 text-gray-400 ph--upload-bold" />
+            <p className="text-gray-400 text-xs mb-2">
+              {isDragOver ? 'Drop your image here' : 'PNG, JPG or SVG (max. 2MB)'}
+            </p>
+            <p className="text-gray-500 text-xs mb-4">Drag & drop or click to browse</p>
+            <input
+              type="file"
+              id="tokenLogo"
+              className="hidden"
+              accept="image/jpeg,image/jpg,image/png,image/svg+xml"
+              onChange={handleFileChange}
+            />
+            <label
+              htmlFor="tokenLogo"
+              className="bg-white/10 px-4 py-2 rounded-lg text-sm hover:bg-white/20 transition cursor-pointer"
+            >
+              Browse Files
+            </label>
+          </>
+        )}
+      </div>
+      {error && (
+        <p className="text-red-400 text-xs mt-2">{error}</p>
+      )}
+    </div>
+  );
 }
 
 export default function CreatePool() {
@@ -246,145 +388,7 @@ export default function CreatePool() {
                     </label>
                     {form.Field({
                       name: 'tokenLogo',
-                      children: (field) => {
-                        const [preview, setPreview] = useState<string | null>(null);
-                        const [error, setError] = useState<string | null>(null);
-
-                        const validateFile = (file: File): boolean => {
-                          // Check file type
-                          const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/svg+xml'];
-                          if (!allowedTypes.includes(file.type)) {
-                            setError('Please select a valid image file (PNG, JPG, or SVG)');
-                            return false;
-                          }
-
-                          // Check file size (2MB = 2 * 1024 * 1024 bytes)
-                          const maxSize = 2 * 1024 * 1024;
-                          if (file.size > maxSize) {
-                            setError('File size must be less than 2MB');
-                            return false;
-                          }
-
-                          setError(null);
-                          return true;
-                        };
-
-                        const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            if (validateFile(file)) {
-                              field.handleChange(file);
-                              
-                              // Create preview
-                              const reader = new FileReader();
-                              reader.onload = (e) => {
-                                setPreview(e.target?.result as string);
-                              };
-                              reader.readAsDataURL(file);
-                            } else {
-                              // Clear the input
-                              e.target.value = '';
-                              field.handleChange(undefined);
-                              setPreview(null);
-                            }
-                          }
-                        };
-
-                        const [isDragOver, setIsDragOver] = useState(false);
-
-                        const handleDragOver = (e: React.DragEvent) => {
-                          e.preventDefault();
-                          setIsDragOver(true);
-                        };
-
-                        const handleDragLeave = (e: React.DragEvent) => {
-                          e.preventDefault();
-                          setIsDragOver(false);
-                        };
-
-                        const handleDrop = (e: React.DragEvent) => {
-                          e.preventDefault();
-                          setIsDragOver(false);
-                          const files = e.dataTransfer.files;
-                          if (files.length > 0) {
-                            const file = files[0];
-                            if (validateFile(file)) {
-                              field.handleChange(file);
-                              
-                              // Create preview
-                              const reader = new FileReader();
-                              reader.onload = (e) => {
-                                setPreview(e.target?.result as string);
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }
-                        };
-
-                        return (
-                          <div>
-                            <div 
-                              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                                isDragOver 
-                                  ? 'border-blue-400 bg-blue-400/10' 
-                                  : 'border-white/20'
-                              }`}
-                              onDragOver={handleDragOver}
-                              onDragLeave={handleDragLeave}
-                              onDrop={handleDrop}
-                            >
-                              {preview ? (
-                                <div className="space-y-4">
-                                  <img 
-                                    src={preview} 
-                                    alt="Preview" 
-                                    className="w-24 h-24 mx-auto rounded-lg object-cover"
-                                  />
-                                  <p className="text-green-400 text-sm">
-                                    {field.state.value?.name} ({field.state.value?.size ? (field.state.value.size / 1024 / 1024).toFixed(2) : '0'}MB)
-                                  </p>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setPreview(null);
-                                      field.handleChange(undefined);
-                                      const input = document.getElementById('tokenLogo') as HTMLInputElement;
-                                      if (input) input.value = '';
-                                    }}
-                                    className="text-red-400 text-sm hover:text-red-300"
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-                              ) : (
-                                <>
-                                  <span className="iconify w-6 h-6 mx-auto mb-2 text-gray-400 ph--upload-bold" />
-                                  <p className="text-gray-400 text-xs mb-2">
-                                    {isDragOver ? 'Drop your image here' : 'PNG, JPG or SVG (max. 2MB)'}
-                                  </p>
-                                  <p className="text-gray-500 text-xs mb-4">Drag & drop or click to browse</p>
-                                  <input
-                                    type="file"
-                                    id="tokenLogo"
-                                    className="hidden"
-                                    accept="image/jpeg,image/jpg,image/png,image/svg+xml"
-                                    onChange={handleFileChange}
-                                  />
-                                  <label
-                                    htmlFor="tokenLogo"
-                                    className="bg-white/10 px-4 py-2 rounded-lg text-sm hover:bg-white/20 transition cursor-pointer"
-                                  >
-                                    Browse Files
-                                  </label>
-                                </>
-                              )}
-                            </div>
-                            {error && (
-                              <p className="text-red-400 text-xs mt-2">{error}</p>
-                            )}
-                          </div>
-                        );
-                      },
+                      children: (field) => <ImageInput field={field} />,
                     })}
                   </div>
                 </div>
