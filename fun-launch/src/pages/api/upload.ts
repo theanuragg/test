@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import * as AWS from 'aws-sdk';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { DynamicBondingCurveClient } from '@meteora-ag/dynamic-bonding-curve-sdk';
+import BN from 'bn.js';
 
 // Environment variables with type assertions
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID as string;
@@ -34,6 +35,8 @@ type UploadRequest = {
   userWallet: string;
   quoteTokens: string[];
   poolType: 'DBC' | 'Standard';
+  initialMarketCap: number;
+  graduationMarketCap: number;
 };
 
 type Metadata = {
@@ -64,11 +67,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { tokenLogo, tokenName, tokenSymbol, mint, userWallet, quoteTokens, poolType } = req.body as UploadRequest;
+    const { tokenLogo, tokenName, tokenSymbol, mint, userWallet, quoteTokens, poolType, initialMarketCap, graduationMarketCap } = req.body as UploadRequest;
 
     // Validate required fields
     if (!tokenLogo || !tokenName || !tokenSymbol || !mint || !userWallet || !quoteTokens || quoteTokens.length === 0 || !poolType) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Validate DBC-specific fields
+    if (poolType === 'DBC') {
+      if (typeof initialMarketCap !== 'number' || typeof graduationMarketCap !== 'number') {
+        return res.status(400).json({ error: 'Initial and graduation market caps are required for DBC pools' });
+      }
+      
+      if (initialMarketCap < 1000 || initialMarketCap > 1000000) {
+        return res.status(400).json({ error: 'Initial market cap must be between 1,000 and 1,000,000 USDC' });
+      }
+      
+      if (graduationMarketCap < 10000 || graduationMarketCap > 10000000) {
+        return res.status(400).json({ error: 'Graduation market cap must be between 10,000 and 10,000,000 USDC' });
+      }
+      
+      if (graduationMarketCap <= initialMarketCap) {
+        return res.status(400).json({ error: 'Graduation market cap must be greater than initial market cap' });
+      }
     }
 
     // Upload image and metadata
@@ -90,7 +112,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       poolType,
       quoteTokens,
       userWallet,
-      metadataUrl
+      metadataUrl,
+      initialMarketCap,
+      graduationMarketCap
     });
 
     const poolTx = await createPoolTransaction({
@@ -101,6 +125,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       userWallet,
       quoteTokens,
       poolType,
+      initialMarketCap,
+      graduationMarketCap,
     });
 
     // Log transaction details
@@ -119,7 +145,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       tokenName,
       tokenSymbol,
       poolType,
-      quoteTokens
+      quoteTokens,
+      initialMarketCap,
+      graduationMarketCap
     });
 
     res.status(200).json({
@@ -137,7 +165,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         mint,
         poolType,
         quoteTokens,
-        metadataUrl
+        metadataUrl,
+        initialMarketCap,
+        graduationMarketCap
       }
     });
   } catch (error) {
@@ -219,6 +249,8 @@ async function createPoolTransaction({
   userWallet,
   quoteTokens,
   poolType,
+  initialMarketCap,
+  graduationMarketCap,
 }: {
   mint: string;
   tokenName: string;
@@ -227,6 +259,8 @@ async function createPoolTransaction({
   userWallet: string;
   quoteTokens: string[];
   poolType: 'DBC' | 'Standard';
+  initialMarketCap: number;
+  graduationMarketCap: number;
 }) {
   const connection = new Connection(RPC_URL, 'confirmed');
   const client = new DynamicBondingCurveClient(connection, 'confirmed');
@@ -245,7 +279,9 @@ async function createPoolTransaction({
       name: tokenName,
       symbol: tokenSymbol,
       quoteTokens,
-      poolCreator: userWallet
+      poolCreator: userWallet,
+      initialMarketCap,
+      graduationMarketCap
     });
     
     // Create the first pool (we'll extend this to handle multiple quote tokens)
@@ -257,6 +293,8 @@ async function createPoolTransaction({
       uri: metadataUrl,
       payer: new PublicKey(userWallet),
       poolCreator: new PublicKey(userWallet),
+      initialMarketCap: new BN(initialMarketCap * 1e6), // Convert to lamports (USDC has 6 decimals)
+      graduationMarketCap: new BN(graduationMarketCap * 1e6), // Convert to lamports
     });
     
     console.log('🏗️ DBC Pool Transaction Built:', {

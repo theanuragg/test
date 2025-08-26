@@ -19,6 +19,16 @@ const poolSchema = z.object({
   twitter: z.string().url({ message: 'Please enter a valid URL' }).optional().or(z.literal('')),
   quoteTokens: z.array(z.string()).min(1, 'At least one quote token must be selected'),
   poolType: z.enum(['DBC', 'Standard']).default('DBC'),
+  initialMarketCap: z.number().min(1000, 'Initial market cap must be at least 1,000 USDC').max(1000000, 'Initial market cap cannot exceed 1,000,000 USDC'),
+  graduationMarketCap: z.number().min(10000, 'Graduation market cap must be at least 10,000 USDC').max(10000000, 'Graduation market cap cannot exceed 10,000,000 USDC'),
+}).refine((data) => {
+  if (data.poolType === 'DBC') {
+    return data.graduationMarketCap > data.initialMarketCap;
+  }
+  return true;
+}, {
+  message: "Graduation market cap must be greater than initial market cap",
+  path: ["graduationMarketCap"]
 });
 
 interface FormValues {
@@ -29,6 +39,8 @@ interface FormValues {
   twitter?: string;
   quoteTokens: string[];
   poolType: 'DBC' | 'Standard';
+  initialMarketCap: number;
+  graduationMarketCap: number;
 }
 
 // Quote token options
@@ -197,6 +209,8 @@ export default function CreatePool() {
       twitter: '',
       quoteTokens: ['EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'], // Default to USDC
       poolType: 'DBC',
+      initialMarketCap: 1000,
+      graduationMarketCap: 10000,
     } as FormValues,
     onSubmit: async ({ value }) => {
       try {
@@ -249,6 +263,8 @@ export default function CreatePool() {
             userWallet: address,
             quoteTokens: value.quoteTokens,
             poolType: value.poolType,
+            initialMarketCap: value.initialMarketCap,
+            graduationMarketCap: value.graduationMarketCap,
           }),
         });
 
@@ -521,6 +537,92 @@ export default function CreatePool() {
                     })}
                   </div>
                 </div>
+
+                {/* DBC Market Cap Configuration */}
+                {form.Field({
+                  name: 'poolType',
+                  children: (field) => 
+                    field.state.value === 'DBC' ? (
+                      <div className="mt-6 pt-6 border-t border-white/10">
+                        <h3 className="text-lg font-semibold text-white mb-4">DBC Market Cap Configuration</h3>
+                        <p className="text-gray-400 mb-4 text-sm">
+                          Set the initial and graduation market caps for your DBC pool. The bonding curve will automatically adjust pricing between these values.
+                        </p>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-300 mb-1">
+                              Initial Market Cap (USDC)*
+                            </label>
+                            {form.Field({
+                              name: 'initialMarketCap',
+                              children: (field) => (
+                                <div className="relative">
+                                  <input
+                                    type="number"
+                                    className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-white pr-12"
+                                    placeholder="5,000"
+                                    value={field.state.value}
+                                    onChange={(e) => field.handleChange(Number(e.target.value))}
+                                    min="1000"
+                                    max="1000000"
+                                    step="100"
+                                  />
+                                  <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">
+                                    USDC
+                                  </span>
+                                </div>
+                              ),
+                            })}
+                            <p className="text-xs text-gray-500 mt-1">Min: 1,000 USDC | Max: 1,000,000 USDC</p>
+                          </div>
+
+                          <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-300 mb-1">
+                              Graduation Market Cap (USDC)*
+                            </label>
+                            {form.Field({
+                              name: 'graduationMarketCap',
+                              children: (field) => (
+                                <div className="relative">
+                                  <input
+                                    type="number"
+                                    className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-white pr-12"
+                                    placeholder="75,000"
+                                    value={field.state.value}
+                                    onChange={(e) => field.handleChange(Number(e.target.value))}
+                                    min="10000"
+                                    max="10000000"
+                                    step="1000"
+                                  />
+                                  <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">
+                                    USDC
+                                  </span>
+                                </div>
+                              ),
+                            })}
+                            <p className="text-xs text-gray-500 mt-1">Min: 10,000 USDC | Max: 10,000,000 USDC</p>
+                          </div>
+                        </div>
+
+                        {/* Market Cap Ratio Display */}
+                        <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-blue-200">Market Cap Ratio:</span>
+                            <span className="text-white font-medium">
+                              {form.getFieldValue('graduationMarketCap') && form.getFieldValue('initialMarketCap') 
+                                ? `${(form.getFieldValue('graduationMarketCap') / form.getFieldValue('initialMarketCap')).toFixed(1)}x`
+                                : 'N/A'
+                              }
+                            </span>
+                          </div>
+                          <div className="mt-2 text-xs text-blue-300">
+                            This ratio determines how much your token can grow before graduating from the DBC pool.
+                          </div>
+                        </div>
+                      </div>
+                    ) : null
+                })}
               </div>
 
               {/* Social Links Section */}
@@ -695,6 +797,32 @@ const PoolCreationSuccess = ({ poolInfo, transactionDetails }: {
                 </div>
               </div>
             </div>
+            
+            {/* Market Cap Information for DBC Pools */}
+            {poolInfo.poolType === 'DBC' && (
+              <div className="mt-4 pt-4 border-t border-blue-500/20">
+                <h4 className="text-sm font-medium text-blue-300 mb-2">Market Cap Configuration</h4>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-blue-200">Initial Market Cap:</span>
+                    <span className="text-white">{poolInfo.initialMarketCap?.toLocaleString()} USDC</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-blue-200">Graduation Market Cap:</span>
+                    <span className="text-white">{poolInfo.graduationMarketCap?.toLocaleString()} USDC</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-blue-200">Growth Ratio:</span>
+                    <span className="text-white">
+                      {poolInfo.graduationMarketCap && poolInfo.initialMarketCap 
+                        ? `${(poolInfo.graduationMarketCap / poolInfo.initialMarketCap).toFixed(1)}x`
+                        : 'N/A'
+                      }
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
         
