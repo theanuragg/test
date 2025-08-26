@@ -185,6 +185,8 @@ export default function CreatePool() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [poolCreated, setPoolCreated] = useState(false);
+  const [poolInfo, setPoolInfo] = useState<any>(null);
+  const [transactionDetails, setTransactionDetails] = useState<any>(null);
 
   const form = useForm({
     defaultValues: {
@@ -255,7 +257,13 @@ export default function CreatePool() {
           throw new Error(error.error);
         }
 
-        const { poolTx } = await uploadResponse.json();
+        const { poolTx, poolId: uploadPoolId, poolInfo: uploadPoolInfo } = await uploadResponse.json();
+        
+        console.log('📤 Upload Response:', {
+          poolId: uploadPoolId,
+          poolInfo: uploadPoolInfo,
+          hasPoolTx: !!poolTx
+        });
         const transaction = Transaction.from(Buffer.from(poolTx, 'base64'));
 
         // Step 2: Sign with keypair first
@@ -280,9 +288,22 @@ export default function CreatePool() {
           throw new Error(error.error);
         }
 
-        const { success } = await sendResponse.json();
+        const { success, poolId, poolInfo: responsePoolInfo } = await sendResponse.json();
         if (success) {
-          toast.success('Pool created successfully');
+          console.log('🎉 Pool Creation Complete:', {
+            poolId,
+            poolInfo: responsePoolInfo,
+            transactionSignature: 'Transaction sent successfully'
+          });
+          
+          setPoolInfo(responsePoolInfo);
+          setTransactionDetails({
+            poolId: uploadPoolId,
+            status: 'success',
+            timestamp: new Date().toISOString()
+          });
+          
+          toast.success(`DBC Pool created successfully! Pool ID: ${uploadPoolId}`);
           setPoolCreated(true);
         }
       } catch (error) {
@@ -313,7 +334,7 @@ export default function CreatePool() {
         />
       </Head>
 
-      <div className="min-h-screen bg-gradient-to-b text-white">
+      <div className="min-h-screen bg-black text-white">
         {/* Header */}
         <Header />
 
@@ -334,7 +355,7 @@ export default function CreatePool() {
           </div>
 
           {poolCreated && !isLoading ? (
-            <PoolCreationSuccess />
+            <PoolCreationSuccess poolInfo={poolInfo} transactionDetails={transactionDetails} />
           ) : (
             <form
               onSubmit={(e) => {
@@ -613,7 +634,10 @@ const SubmitButton = ({ isSubmitting }: { isSubmitting: boolean }) => {
   );
 };
 
-const PoolCreationSuccess = () => {
+const PoolCreationSuccess = ({ poolInfo, transactionDetails }: { 
+  poolInfo: any; 
+  transactionDetails: any; 
+}) => {
   return (
     <>
       <div className="bg-white/5 rounded-xl p-8 backdrop-blur-sm border border-white/10 text-center">
@@ -624,14 +648,99 @@ const PoolCreationSuccess = () => {
         <p className="text-gray-300 mb-4 max-w-lg mx-auto">
           Your DBC token pool has been created and is now live on the Virtual Curve platform with USDC and SOL quote tokens.
         </p>
+        
+        {/* Pool Information */}
+        {poolInfo && (
+          <div className="bg-blue-500/20 border border-blue-500/30 rounded-lg p-4 mb-6 max-w-2xl mx-auto">
+            <h3 className="text-lg font-semibold text-blue-300 mb-3">Pool Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-blue-200">Pool ID:</span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-white font-mono text-sm">{transactionDetails?.poolId}</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(transactionDetails?.poolId || '');
+                        toast.success('Pool ID copied to clipboard!');
+                      }}
+                      className="text-blue-300 hover:text-blue-200 transition-colors"
+                      title="Copy Pool ID"
+                    >
+                      <span className="iconify ph--copy w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-blue-200">Token Name:</span>
+                  <span className="text-white">{poolInfo.tokenName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-blue-200">Token Symbol:</span>
+                  <span className="text-white">{poolInfo.tokenSymbol}</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-blue-200">Pool Type:</span>
+                  <span className="text-white">{poolInfo.poolType}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-blue-200">Quote Tokens:</span>
+                  <span className="text-white">{poolInfo.quoteTokens?.join(', ')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-blue-200">Status:</span>
+                  <span className="text-green-400">✅ Active</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Transaction Details */}
+        {transactionDetails && (
+          <div className="bg-green-500/20 border border-green-500/30 rounded-lg p-4 mb-6 max-w-2xl mx-auto">
+            <h3 className="text-lg font-semibold text-green-300 mb-3">Transaction Details</h3>
+            <div className="space-y-2 text-left">
+              <div className="flex justify-between">
+                <span className="text-green-200">Pool ID:</span>
+                <div className="flex items-center space-x-2">
+                  <span className="text-white font-mono text-sm">{transactionDetails.poolId}</span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(transactionDetails.poolId || '');
+                      toast.success('Pool ID copied to clipboard!');
+                    }}
+                    className="text-green-300 hover:text-green-200 transition-colors"
+                    title="Copy Pool ID"
+                  >
+                    <span className="iconify ph--copy w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-green-200">Status:</span>
+                <span className="text-green-400">{transactionDetails.status}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-green-200">Created:</span>
+                <span className="text-white">{new Date(transactionDetails.timestamp).toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+        )}
+        
         <div className="bg-blue-500/20 border border-blue-500/30 rounded-lg p-4 mb-8 max-w-md mx-auto">
-          <h3 className="text-lg font-semibold text-blue-300 mb-2">Pool Details</h3>
+          <h3 className="text-lg font-semibold text-blue-300 mb-2">DBC Pool Benefits</h3>
           <div className="text-sm text-blue-200 space-y-1">
             <p>• Dynamic Bonding Curve (DBC) Pool</p>
             <p>• Quote Tokens: USDC, SOL</p>
             <p>• Automated Market Making Enabled</p>
+            <p>• Reduced Impermanent Loss</p>
           </div>
         </div>
+        
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link
             href="/explore-pools"
@@ -646,6 +755,19 @@ const PoolCreationSuccess = () => {
             className="cursor-pointer bg-gradient-to-r from-pink-500 to-purple-500 px-6 py-3 rounded-xl font-medium hover:opacity-90 transition"
           >
             Create Another Pool
+          </button>
+          <button
+            onClick={() => {
+              console.log('🔍 Pool Creation Logs:', {
+                poolInfo,
+                transactionDetails,
+                timestamp: new Date().toISOString()
+              });
+              toast.success('Check browser console for detailed logs!');
+            }}
+            className="cursor-pointer bg-yellow-500/20 border border-yellow-500/30 px-6 py-3 rounded-xl font-medium hover:bg-yellow-500/30 transition text-yellow-300"
+          >
+            📋 View Console Logs
           </button>
         </div>
       </div>

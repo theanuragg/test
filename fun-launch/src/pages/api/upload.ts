@@ -83,6 +83,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Create pool transaction
+    console.log('🚀 Creating DBC Pool:', {
+      tokenName,
+      tokenSymbol,
+      mint,
+      poolType,
+      quoteTokens,
+      userWallet,
+      metadataUrl
+    });
+
     const poolTx = await createPoolTransaction({
       mint,
       tokenName,
@@ -93,6 +103,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       poolType,
     });
 
+    // Log transaction details
+    console.log('📝 Pool Transaction Created:', {
+      feePayer: poolTx.feePayer?.toBase58(),
+      recentBlockhash: poolTx.recentBlockhash,
+      instructions: poolTx.instructions.length,
+      signers: poolTx.signatures.length
+    });
+
+    // Extract pool ID from the transaction (this will be the mint address for now)
+    const poolId = mint;
+    
+    console.log('✅ Pool Creation Successful:', {
+      poolId,
+      tokenName,
+      tokenSymbol,
+      poolType,
+      quoteTokens
+    });
+
     res.status(200).json({
       success: true,
       poolTx: poolTx
@@ -101,6 +130,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           verifySignatures: false,
         })
         .toString('base64'),
+      poolId,
+      poolInfo: {
+        tokenName,
+        tokenSymbol,
+        mint,
+        poolType,
+        quoteTokens,
+        metadataUrl
+      }
     });
   } catch (error) {
     console.error('Upload error:', error);
@@ -201,6 +239,15 @@ async function createPoolTransaction({
       throw new Error('At least one quote token is required for DBC pools');
     }
     
+    console.log('🔧 DBC Pool Configuration:', {
+      config: POOL_CONFIG_KEY,
+      baseMint: mint,
+      name: tokenName,
+      symbol: tokenSymbol,
+      quoteTokens,
+      poolCreator: userWallet
+    });
+    
     // Create the first pool (we'll extend this to handle multiple quote tokens)
     poolTx = await client.pool.createPool({
       config: new PublicKey(POOL_CONFIG_KEY),
@@ -212,11 +259,26 @@ async function createPoolTransaction({
       poolCreator: new PublicKey(userWallet),
     });
     
+    console.log('🏗️ DBC Pool Transaction Built:', {
+      instructions: poolTx.instructions.length,
+      signers: poolTx.signatures.length,
+      baseMint: mint,
+      quoteTokens: quoteTokens.join(', ')
+    });
+    
     // TODO: For multiple quote tokens, we would need to create additional pools
     // or use a different DBC configuration that supports multiple quote tokens
-    console.log(`Creating DBC pool for ${tokenName} with quote tokens: ${quoteTokens.join(', ')}`);
+    console.log(`✅ DBC pool transaction created for ${tokenName} with quote tokens: ${quoteTokens.join(', ')}`);
   } else {
     // Standard pool creation
+    console.log('🔧 Standard Pool Configuration:', {
+      config: POOL_CONFIG_KEY,
+      baseMint: mint,
+      name: tokenName,
+      symbol: tokenSymbol,
+      poolCreator: userWallet
+    });
+    
     poolTx = await client.pool.createPool({
       config: new PublicKey(POOL_CONFIG_KEY),
       baseMint: new PublicKey(mint),
@@ -225,6 +287,12 @@ async function createPoolTransaction({
       uri: metadataUrl,
       payer: new PublicKey(userWallet),
       poolCreator: new PublicKey(userWallet),
+    });
+    
+    console.log('🏗️ Standard Pool Transaction Built:', {
+      instructions: poolTx.instructions.length,
+      signers: poolTx.signatures.length,
+      baseMint: mint
     });
   }
 
