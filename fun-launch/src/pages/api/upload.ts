@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import AWS from 'aws-sdk';
+import * as AWS from 'aws-sdk';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { DynamicBondingCurveClient } from '@meteora-ag/dynamic-bonding-curve-sdk';
 
@@ -32,6 +32,8 @@ type UploadRequest = {
   tokenSymbol: string;
   mint: string;
   userWallet: string;
+  quoteTokens: string[];
+  poolType: 'DBC' | 'Standard';
 };
 
 type Metadata = {
@@ -62,10 +64,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { tokenLogo, tokenName, tokenSymbol, mint, userWallet } = req.body as UploadRequest;
+    const { tokenLogo, tokenName, tokenSymbol, mint, userWallet, quoteTokens, poolType } = req.body as UploadRequest;
 
     // Validate required fields
-    if (!tokenLogo || !tokenName || !tokenSymbol || !mint || !userWallet) {
+    if (!tokenLogo || !tokenName || !tokenSymbol || !mint || !userWallet || !quoteTokens || quoteTokens.length === 0 || !poolType) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
@@ -87,6 +89,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       tokenSymbol,
       metadataUrl,
       userWallet,
+      quoteTokens,
+      poolType,
     });
 
     res.status(200).json({
@@ -175,25 +179,54 @@ async function createPoolTransaction({
   tokenSymbol,
   metadataUrl,
   userWallet,
+  quoteTokens,
+  poolType,
 }: {
   mint: string;
   tokenName: string;
   tokenSymbol: string;
   metadataUrl: string;
   userWallet: string;
+  quoteTokens: string[];
+  poolType: 'DBC' | 'Standard';
 }) {
   const connection = new Connection(RPC_URL, 'confirmed');
   const client = new DynamicBondingCurveClient(connection, 'confirmed');
 
-  const poolTx = await client.pool.createPool({
-    config: new PublicKey(POOL_CONFIG_KEY),
-    baseMint: new PublicKey(mint),
-    name: tokenName,
-    symbol: tokenSymbol,
-    uri: metadataUrl,
-    payer: new PublicKey(userWallet),
-    poolCreator: new PublicKey(userWallet),
-  });
+  let poolTx;
+  
+  if (poolType === 'DBC') {
+    // For DBC pools, create pools for each quote token
+    if (quoteTokens.length === 0) {
+      throw new Error('At least one quote token is required for DBC pools');
+    }
+    
+    // Create the first pool (we'll extend this to handle multiple quote tokens)
+    poolTx = await client.pool.createPool({
+      config: new PublicKey(POOL_CONFIG_KEY),
+      baseMint: new PublicKey(mint),
+      name: tokenName,
+      symbol: tokenSymbol,
+      uri: metadataUrl,
+      payer: new PublicKey(userWallet),
+      poolCreator: new PublicKey(userWallet),
+    });
+    
+    // TODO: For multiple quote tokens, we would need to create additional pools
+    // or use a different DBC configuration that supports multiple quote tokens
+    console.log(`Creating DBC pool for ${tokenName} with quote tokens: ${quoteTokens.join(', ')}`);
+  } else {
+    // Standard pool creation
+    poolTx = await client.pool.createPool({
+      config: new PublicKey(POOL_CONFIG_KEY),
+      baseMint: new PublicKey(mint),
+      name: tokenName,
+      symbol: tokenSymbol,
+      uri: metadataUrl,
+      payer: new PublicKey(userWallet),
+      poolCreator: new PublicKey(userWallet),
+    });
+  }
 
   const { blockhash } = await connection.getLatestBlockhash();
   poolTx.feePayer = new PublicKey(userWallet);

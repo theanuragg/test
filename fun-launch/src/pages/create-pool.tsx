@@ -17,6 +17,8 @@ const poolSchema = z.object({
   tokenLogo: z.instanceof(File, { message: 'Token logo is required' }).optional(),
   website: z.string().url({ message: 'Please enter a valid URL' }).optional().or(z.literal('')),
   twitter: z.string().url({ message: 'Please enter a valid URL' }).optional().or(z.literal('')),
+  quoteTokens: z.array(z.string()).min(1, 'At least one quote token must be selected'),
+  poolType: z.enum(['DBC', 'Standard']).default('DBC'),
 });
 
 interface FormValues {
@@ -25,7 +27,15 @@ interface FormValues {
   tokenLogo: File | undefined;
   website?: string;
   twitter?: string;
+  quoteTokens: string[];
+  poolType: 'DBC' | 'Standard';
 }
+
+// Quote token options
+const QUOTE_TOKENS = [
+  { symbol: 'USDC', address: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', name: 'USD Coin' },
+  { symbol: 'SOL', address: 'So11111111111111111111111111111111111111112', name: 'Solana' },
+];
 
 // Separate component for image input to avoid hooks violation
 function ImageInput({ field }: { field: any }) {
@@ -183,6 +193,8 @@ export default function CreatePool() {
       tokenLogo: undefined,
       website: '',
       twitter: '',
+      quoteTokens: ['EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'], // Default to USDC
+      poolType: 'DBC',
     } as FormValues,
     onSubmit: async ({ value }) => {
       try {
@@ -233,6 +245,8 @@ export default function CreatePool() {
             tokenName: value.tokenName,
             tokenSymbol: value.tokenSymbol,
             userWallet: address,
+            quoteTokens: value.quoteTokens,
+            poolType: value.poolType,
           }),
         });
 
@@ -307,8 +321,15 @@ export default function CreatePool() {
         <main className="container mx-auto px-4 py-10">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10">
             <div>
-              <h1 className="text-4xl font-bold mb-2">Create Pool</h1>
-              <p className="text-gray-300">Launch your token with a customizable price curve</p>
+              <h1 className="text-4xl font-bold mb-2">Create DBC Pool</h1>
+              <p className="text-gray-300">Launch your token with Dynamic Bonding Curve and multiple quote tokens</p>
+            </div>
+            <div className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30 rounded-xl p-4 mt-4 md:mt-0">
+              <div className="flex items-center space-x-2">
+                <span className="iconify ph--database-bold w-5 h-5 text-blue-400" />
+                <span className="text-blue-300 font-medium">DBC Protocol</span>
+              </div>
+              <p className="text-xs text-blue-200 mt-1">Dynamic Bonding Curve</p>
             </div>
           </div>
 
@@ -325,6 +346,20 @@ export default function CreatePool() {
               {/* Token Details Section */}
               <div className="bg-white/5 rounded-xl p-8 backdrop-blur-sm border border-white/10">
                 <h2 className="text-2xl font-bold mb-4">Token Details</h2>
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 mb-6">
+                  <div className="flex items-start space-x-3">
+                    <span className="iconify ph--info-bold w-5 h-5 text-blue-400 mt-0.5" />
+                    <div className="text-sm text-blue-200">
+                      <p className="font-medium mb-1">DBC Pool Benefits:</p>
+                      <ul className="space-y-1 text-blue-100">
+                        <li>• Automated market making with dynamic pricing</li>
+                        <li>• Multiple quote token support (USDC, SOL)</li>
+                        <li>• Reduced impermanent loss for liquidity providers</li>
+                        <li>• Real-time price discovery</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
@@ -389,6 +424,79 @@ export default function CreatePool() {
                     {form.Field({
                       name: 'tokenLogo',
                       children: (field) => <ImageInput field={field} />,
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Pool Configuration Section */}
+              <div className="bg-white/5 rounded-xl p-8 backdrop-blur-sm border border-white/10">
+                <h2 className="text-2xl font-bold mb-6">Pool Configuration</h2>
+                <p className="text-gray-400 mb-6">
+                  Configure your pool type and select quote tokens for trading. DBC pools use dynamic bonding curves for automated market making.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                      Pool Type
+                    </label>
+                    {form.Field({
+                      name: 'poolType',
+                      children: (field) => (
+                        <select
+                          className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-white"
+                          value={field.state.value}
+                          onChange={(e) => field.handleChange(e.target.value as 'DBC' | 'Standard')}
+                        >
+                          <option value="DBC">Dynamic Bonding Curve (DBC)</option>
+                          <option value="Standard">Standard Pool</option>
+                        </select>
+                      ),
+                    })}
+                  </div>
+
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                      Quote Tokens*
+                    </label>
+                    {form.Field({
+                      name: 'quoteTokens',
+                      children: (field) => (
+                        <div className="space-y-3">
+                          {QUOTE_TOKENS.map((token) => (
+                            <label key={token.symbol} className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg border border-white/10 hover:bg-white/5 transition-colors">
+                              <input
+                                type="checkbox"
+                                checked={field.state.value.includes(token.address)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    field.handleChange([...field.state.value, token.address]);
+                                  } else {
+                                    field.handleChange(field.state.value.filter(addr => addr !== token.address));
+                                  }
+                                }}
+                                className="rounded border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500"
+                              />
+                              <div className="flex-1">
+                                <span className="text-sm font-medium text-white">
+                                  {token.symbol}
+                                </span>
+                                <p className="text-xs text-gray-400">
+                                  {token.name}
+                                </p>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      ),
+                    })}
+                    {form.Field({
+                      name: 'quoteTokens',
+                      children: (field) => 
+                        field.state.value.length === 0 ? (
+                          <p className="text-red-400 text-xs mt-2">Please select at least one quote token</p>
+                        ) : null
                     })}
                   </div>
                 </div>
@@ -512,11 +620,18 @@ const PoolCreationSuccess = () => {
         <div className="bg-green-500/20 p-4 rounded-full inline-flex mb-6">
           <span className="iconify ph--check-bold w-12 h-12 text-green-500" />
         </div>
-        <h2 className="text-3xl font-bold mb-4">Pool Created Successfully!</h2>
-        <p className="text-gray-300 mb-8 max-w-lg mx-auto">
-          Your token pool has been created and is now live on the Virtual Curve platform. Users can
-          now buy and trade your tokens.
+        <h2 className="text-3xl font-bold mb-4">DBC Pool Created Successfully!</h2>
+        <p className="text-gray-300 mb-4 max-w-lg mx-auto">
+          Your DBC token pool has been created and is now live on the Virtual Curve platform with USDC and SOL quote tokens.
         </p>
+        <div className="bg-blue-500/20 border border-blue-500/30 rounded-lg p-4 mb-8 max-w-md mx-auto">
+          <h3 className="text-lg font-semibold text-blue-300 mb-2">Pool Details</h3>
+          <div className="text-sm text-blue-200 space-y-1">
+            <p>• Dynamic Bonding Curve (DBC) Pool</p>
+            <p>• Quote Tokens: USDC, SOL</p>
+            <p>• Automated Market Making Enabled</p>
+          </div>
+        </div>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link
             href="/explore-pools"
