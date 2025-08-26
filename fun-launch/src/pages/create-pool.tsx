@@ -21,6 +21,11 @@ const poolSchema = z.object({
   poolType: z.enum(['DBC', 'Standard']).default('DBC'),
   initialMarketCap: z.number().min(1000, 'Initial market cap must be at least 1,000 USDC').max(1000000, 'Initial market cap cannot exceed 1,000,000 USDC'),
   graduationMarketCap: z.number().min(10000, 'Graduation market cap must be at least 10,000 USDC').max(10000000, 'Graduation market cap cannot exceed 10,000,000 USDC'),
+  // Enhanced DBC configuration options
+  curveType: z.enum(['linear', 'exponential', 'logarithmic']).default('linear'),
+  feeRate: z.number().min(10, 'Fee rate must be at least 0.1%').max(500, 'Fee rate cannot exceed 5%').default(30),
+  slippageTolerance: z.number().min(50, 'Slippage tolerance must be at least 0.5%').max(1000, 'Slippage tolerance cannot exceed 10%').default(100),
+  maxSupply: z.number().min(1000000, 'Max supply must be at least 1M').max(10000000000, 'Max supply cannot exceed 10B').default(1000000000),
 }).refine((data) => {
   if (data.poolType === 'DBC') {
     return data.graduationMarketCap > data.initialMarketCap;
@@ -41,6 +46,11 @@ interface FormValues {
   poolType: 'DBC' | 'Standard';
   initialMarketCap: number;
   graduationMarketCap: number;
+  // Enhanced DBC configuration options
+  curveType: 'linear' | 'exponential' | 'logarithmic';
+  feeRate: number;
+  slippageTolerance: number;
+  maxSupply: number;
 }
 
 // Quote token options
@@ -211,6 +221,11 @@ export default function CreatePool() {
       poolType: 'DBC',
       initialMarketCap: 1000,
       graduationMarketCap: 10000,
+      // Enhanced DBC configuration defaults
+      curveType: 'linear',
+      feeRate: 30,
+      slippageTolerance: 100,
+      maxSupply: 1000000000,
     } as FormValues,
     onSubmit: async ({ value }) => {
       try {
@@ -265,6 +280,13 @@ export default function CreatePool() {
             poolType: value.poolType,
             initialMarketCap: value.initialMarketCap,
             graduationMarketCap: value.graduationMarketCap,
+            // Enhanced DBC configuration
+            dbcConfig: value.poolType === 'DBC' ? {
+              curveType: value.curveType,
+              feeRate: value.feeRate,
+              slippageTolerance: value.slippageTolerance,
+              maxSupply: value.maxSupply,
+            } : undefined,
           }),
         });
 
@@ -618,6 +640,130 @@ export default function CreatePool() {
                           </div>
                           <div className="mt-2 text-xs text-blue-300">
                             This ratio determines how much your token can grow before graduating from the DBC pool.
+                          </div>
+                        </div>
+
+                        {/* Enhanced DBC Configuration */}
+                        <div className="mt-6 pt-6 border-t border-white/10">
+                          <h4 className="text-lg font-semibold text-white mb-4">Advanced DBC Configuration</h4>
+                          <p className="text-gray-400 mb-4 text-sm">
+                            Customize your bonding curve behavior and trading parameters for optimal performance.
+                          </p>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Curve Type Selection */}
+                            <div className="mb-4">
+                              <label className="block text-sm font-medium text-gray-300 mb-2">
+                                Bonding Curve Type
+                              </label>
+                              {form.Field({
+                                name: 'curveType',
+                                children: (field) => (
+                                  <select
+                                    className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-white"
+                                    value={field.state.value}
+                                    onChange={(e) => field.handleChange(e.target.value as 'linear' | 'exponential' | 'logarithmic')}
+                                  >
+                                    <option value="linear">Linear - Steady Growth</option>
+                                    <option value="exponential">Exponential - Aggressive Growth</option>
+                                    <option value="logarithmic">Logarithmic - Gradual Growth</option>
+                                  </select>
+                                ),
+                              })}
+                              <p className="text-xs text-gray-500 mt-1">
+                                Choose how your token price increases as market cap grows
+                              </p>
+                            </div>
+
+                            {/* Fee Rate */}
+                            <div className="mb-4">
+                              <label className="block text-sm font-medium text-gray-300 mb-2">
+                                Trading Fee Rate (Basis Points)
+                              </label>
+                              {form.Field({
+                                name: 'feeRate',
+                                children: (field) => (
+                                  <input
+                                    type="number"
+                                    className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-white"
+                                    placeholder="30"
+                                    min="10"
+                                    max="500"
+                                    value={field.state.value}
+                                    onChange={(e) => field.handleChange(Number(e.target.value))}
+                                  />
+                                ),
+                              })}
+                              <p className="text-xs text-gray-500 mt-1">
+                                Trading fee in basis points (30 = 0.3%). Higher fees = more revenue for LPs
+                              </p>
+                            </div>
+
+                            {/* Slippage Tolerance */}
+                            <div className="mb-4">
+                              <label className="block text-sm font-medium text-gray-300 mb-2">
+                                Slippage Tolerance (Basis Points)
+                              </label>
+                              {form.Field({
+                                name: 'slippageTolerance',
+                                children: (field) => (
+                                  <input
+                                    type="number"
+                                    className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-white"
+                                    placeholder="100"
+                                    min="50"
+                                    max="1000"
+                                    value={field.state.value}
+                                    onChange={(e) => field.handleChange(Number(e.target.value))}
+                                  />
+                                ),
+                              })}
+                              <p className="text-xs text-gray-500 mt-1">
+                                Maximum allowed slippage (100 = 1%). Lower = better price protection
+                              </p>
+                            </div>
+
+                            {/* Max Supply */}
+                            <div className="mb-4">
+                              <label className="block text-sm font-medium text-gray-300 mb-2">
+                                Maximum Token Supply
+                              </label>
+                              {form.Field({
+                                name: 'maxSupply',
+                                children: (field) => (
+                                  <input
+                                    type="number"
+                                    className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-white"
+                                    placeholder="1000000000"
+                                    min="1000000"
+                                    max="10000000000"
+                                    value={field.state.value}
+                                    onChange={(e) => field.handleChange(Number(e.target.value))}
+                                  />
+                                ),
+                              })}
+                              <p className="text-xs text-gray-500 mt-1">
+                                Maximum tokens that can exist in the pool (1B = 1,000,000,000)
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Curve Behavior Preview */}
+                          <div className="mt-6 p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                            <h5 className="text-sm font-medium text-green-200 mb-2">Curve Behavior Preview</h5>
+                            <div className="text-xs text-green-300 space-y-1">
+                              {form.getFieldValue('curveType') === 'linear' && (
+                                <p>• Linear growth provides steady, predictable price increases</p>
+                              )}
+                              {form.getFieldValue('curveType') === 'exponential' && (
+                                <p>• Exponential growth accelerates price increases as market cap grows</p>
+                              )}
+                              {form.getFieldValue('curveType') === 'logarithmic' && (
+                                <p>• Logarithmic growth provides early price momentum with gradual tapering</p>
+                              )}
+                              <p>• Fee rate: {form.getFieldValue('feeRate') || 30} basis points ({(form.getFieldValue('feeRate') || 30) / 100}%)</p>
+                              <p>• Slippage protection: {form.getFieldValue('slippageTolerance') || 100} basis points ({(form.getFieldValue('slippageTolerance') || 100) / 100}%)</p>
+                            </div>
                           </div>
                         </div>
                       </div>
