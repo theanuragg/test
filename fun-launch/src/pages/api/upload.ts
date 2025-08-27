@@ -32,6 +32,21 @@ type DBCConfig = {
   feeRate: number; // Fee rate in basis points (e.g., 30 = 0.3%)
   slippageTolerance: number; // Slippage tolerance in basis points
   maxSupply: number; // Maximum token supply for the pool
+  antiSniperConfig?: {
+    mode: 'feeScheduler' | 'rateLimiter';
+    feeScheduler?: {
+      cliffFeeNumerator: number;
+      numberOfPeriods: number;
+      periodFrequency: number;
+      feeReductionFactor: number;
+      finalFee: number;
+    };
+    rateLimiter?: {
+      referenceAmount: number;
+      feeIncrement: number;
+      maxLimiterDuration: number;
+    };
+  };
 };
 
 type UploadRequest = {
@@ -294,6 +309,37 @@ async function createPoolTransaction({
       graduationMarketCap,
       dbcConfig
     });
+    
+    // Log anti-sniper configuration if enabled
+    if (dbcConfig?.antiSniperConfig) {
+      console.log('🛡️ Anti-Sniper Protection Enabled:', {
+        mode: dbcConfig.antiSniperConfig.mode,
+        feeScheduler: dbcConfig.antiSniperConfig.feeScheduler,
+        rateLimiter: dbcConfig.antiSniperConfig.rateLimiter
+      });
+      
+      if (dbcConfig.antiSniperConfig.mode === 'feeScheduler' && dbcConfig.antiSniperConfig.feeScheduler) {
+        const { cliffFeeNumerator, numberOfPeriods, periodFrequency, feeReductionFactor, finalFee } = dbcConfig.antiSniperConfig.feeScheduler;
+        console.log('⏰ Fee Scheduler Configuration:', {
+          startingFee: `${cliffFeeNumerator / 100}%`,
+          periods: numberOfPeriods,
+          periodDuration: `${periodFrequency} minutes`,
+          totalDuration: `${(numberOfPeriods * periodFrequency) / 60} hours`,
+          feeReduction: `${feeReductionFactor / 100}% per period`,
+          finalFee: `${finalFee / 100}%`
+        });
+      }
+      
+      if (dbcConfig.antiSniperConfig.mode === 'rateLimiter' && dbcConfig.antiSniperConfig.rateLimiter) {
+        const { referenceAmount, feeIncrement, maxLimiterDuration } = dbcConfig.antiSniperConfig.rateLimiter;
+        console.log('📊 Rate Limiter Configuration:', {
+          referenceAmount: `${referenceAmount} USDC`,
+          feeIncrement: `${feeIncrement / 100}% per reference amount`,
+          maxDuration: `${maxLimiterDuration} hours`,
+          maxFee: `${Math.min(2500, feeIncrement * (100 / referenceAmount)) / 100}%` // Cap at 25%
+        });
+      }
+    }
     
     // Enhanced DBC pool creation with buildCurveWithMarketCap
     const curveConfig = buildCurveWithMarketCap({

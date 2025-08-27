@@ -26,6 +26,16 @@ const poolSchema = z.object({
   feeRate: z.number().min(10, 'Fee rate must be at least 0.1%').max(500, 'Fee rate cannot exceed 5%').default(30),
   slippageTolerance: z.number().min(50, 'Slippage tolerance must be at least 0.5%').max(1000, 'Slippage tolerance cannot exceed 10%').default(100),
   maxSupply: z.number().min(1000000, 'Max supply must be at least 1M').max(10000000000, 'Max supply cannot exceed 10B').default(1000000000),
+  enableAntiSniper: z.boolean().optional(),
+  antiSniperMode: z.enum(['feeScheduler', 'rateLimiter']).optional(),
+  cliffFeeNumerator: z.number().optional(),
+  numberOfPeriods: z.number().optional(),
+  periodFrequency: z.number().optional(),
+  feeReductionFactor: z.number().optional(),
+  finalFee: z.number().optional(),
+  referenceAmount: z.number().optional(),
+  feeIncrement: z.number().optional(),
+  maxLimiterDuration: z.number().optional(),
 }).refine((data) => {
   if (data.poolType === 'DBC') {
     return data.graduationMarketCap > data.initialMarketCap;
@@ -34,6 +44,34 @@ const poolSchema = z.object({
 }, {
   message: "Graduation market cap must be greater than initial market cap",
   path: ["graduationMarketCap"]
+}).refine((data) => {
+  // If anti-sniper is enabled, exactly one mode must be selected
+  if (data.enableAntiSniper && !data.antiSniperMode) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Anti-sniper mode must be selected when anti-sniper protection is enabled",
+  path: ["antiSniperMode"]
+}).refine((data) => {
+  // If fee scheduler is selected, validate all required parameters
+  if (data.antiSniperMode === 'feeScheduler') {
+    return data.cliffFeeNumerator && data.numberOfPeriods && data.periodFrequency && 
+           data.feeReductionFactor && data.finalFee;
+  }
+  return true;
+}, {
+  message: "All fee scheduler parameters are required when fee scheduler mode is selected",
+  path: ["cliffFeeNumerator"]
+}).refine((data) => {
+  // If rate limiter is selected, validate all required parameters
+  if (data.antiSniperMode === 'rateLimiter') {
+    return data.referenceAmount && data.feeIncrement && data.maxLimiterDuration;
+  }
+  return true;
+}, {
+  message: "All rate limiter parameters are required when rate limiter mode is selected",
+  path: ["referenceAmount"]
 });
 
 interface FormValues {
@@ -51,6 +89,16 @@ interface FormValues {
   feeRate: number;
   slippageTolerance: number;
   maxSupply: number;
+  enableAntiSniper: boolean;
+  antiSniperMode: 'feeScheduler' | 'rateLimiter';
+  cliffFeeNumerator: number;
+  numberOfPeriods: number;
+  periodFrequency: number;
+  feeReductionFactor: number;
+  finalFee: number;
+  referenceAmount: number;
+  feeIncrement: number;
+  maxLimiterDuration: number;
 }
 
 // Quote token options
@@ -226,6 +274,17 @@ export default function CreatePool() {
       feeRate: 30,
       slippageTolerance: 100,
       maxSupply: 1000000000,
+      // Anti-sniper protection defaults
+      enableAntiSniper: false,
+      antiSniperMode: 'feeScheduler',
+      cliffFeeNumerator: 30,
+      numberOfPeriods: 4,
+      periodFrequency: 30,
+      feeReductionFactor: 5,
+      finalFee: 0.25,
+      referenceAmount: 5,
+      feeIncrement: 1,
+      maxLimiterDuration: 4,
     } as FormValues,
     onSubmit: async ({ value }) => {
       try {
@@ -286,6 +345,22 @@ export default function CreatePool() {
               feeRate: value.feeRate,
               slippageTolerance: value.slippageTolerance,
               maxSupply: value.maxSupply,
+              // Anti-sniper protection configuration
+              antiSniperConfig: value.enableAntiSniper ? {
+                mode: value.antiSniperMode,
+                feeScheduler: value.antiSniperMode === 'feeScheduler' ? {
+                  cliffFeeNumerator: value.cliffFeeNumerator,
+                  numberOfPeriods: value.numberOfPeriods,
+                  periodFrequency: value.periodFrequency,
+                  feeReductionFactor: value.feeReductionFactor,
+                  finalFee: value.finalFee,
+                } : undefined,
+                rateLimiter: value.antiSniperMode === 'rateLimiter' ? {
+                  referenceAmount: value.referenceAmount,
+                  feeIncrement: value.feeIncrement,
+                  maxLimiterDuration: value.maxLimiterDuration,
+                } : undefined,
+              } : undefined,
             } : undefined,
           }),
         });
@@ -746,6 +821,305 @@ export default function CreatePool() {
                                 Maximum tokens that can exist in the pool (1B = 1,000,000,000)
                               </p>
                             </div>
+
+                            {/* Anti-Sniper Protection */}
+                            <div className="mb-4">
+                              <label className="block text-sm font-medium text-gray-300 mb-2">
+                                Enable Anti-Sniper Protection
+                              </label>
+                              {form.Field({
+                                name: 'enableAntiSniper',
+                                children: (field) => (
+                                  <select
+                                    className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-white"
+                                    value={field.state.value ? 'true' : 'false'}
+                                    onChange={(e) => field.handleChange(e.target.value === 'true')}
+                                  >
+                                    <option value="false">No</option>
+                                    <option value="true">Yes</option>
+                                  </select>
+                                ),
+                              })}
+                              <p className="text-xs text-gray-500 mt-1">
+                                Enable anti-sniper protection to deter bots and ensure fair trading
+                              </p>
+                            </div>
+
+                            {/* Anti-Sniper Mode */}
+                            {form.getFieldValue('enableAntiSniper') && (
+                              <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-300 mb-2">
+                                  Anti-Sniper Mode
+                                </label>
+                                {form.Field({
+                                  name: 'antiSniperMode',
+                                  children: (field) => (
+                                    <select
+                                      className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-white"
+                                      value={field.state.value}
+                                      onChange={(e) => field.handleChange(e.target.value as 'feeScheduler' | 'rateLimiter')}
+                                    >
+                                      <option value="feeScheduler">Fee Scheduler (Time-based decay)</option>
+                                      <option value="rateLimiter">Rate Limiter (Size-based fee)</option>
+                                    </select>
+                                  ),
+                                })}
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Fee Scheduler reduces fees over time, Rate Limiter increases fees based on trade size
+                                </p>
+                                
+                                {/* IMPORTANT WARNING */}
+                                <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                                  <div className="flex items-start space-x-2">
+                                    <span className="iconify ph--warning w-4 h-4 text-yellow-400 mt-0.5" />
+                                    <div className="text-xs text-yellow-300">
+                                      <p className="font-medium mb-1">⚠️ Important:</p>
+                                      <p>• Only ONE anti-sniper mode can be active per pool (Meteora constraint)</p>
+                                      <p>• Fee Scheduler: Reduces trading fees over time</p>
+                                      <p>• Rate Limiter: Increases fees for large trades</p>
+                                      <p>• Choose the mode that best fits your token's launch strategy</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Fee Scheduler Configuration */}
+                            {form.getFieldValue('enableAntiSniper') && form.getFieldValue('antiSniperMode') === 'feeScheduler' && (
+                              <div className="mt-6 pt-6 border-t border-white/10">
+                                <h5 className="text-lg font-semibold text-white mb-4">Fee Scheduler Configuration</h5>
+                                <p className="text-gray-400 mb-4 text-sm">
+                                  Configure time-based fee decay to deter early bot activity and gradually normalize trading fees.
+                                </p>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                  <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                      Starting Fee (%)
+                                    </label>
+                                    {form.Field({
+                                      name: 'cliffFeeNumerator',
+                                      children: (field) => (
+                                        <input
+                                          type="number"
+                                          className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-white"
+                                          placeholder="30"
+                                          min="30"
+                                          max="50"
+                                          step="5"
+                                          value={field.state.value}
+                                          onChange={(e) => field.handleChange(Number(e.target.value))}
+                                        />
+                                      ),
+                                    })}
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Initial fee percentage (30-50% recommended)
+                                    </p>
+                                  </div>
+
+                                  <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                      Number of Periods
+                                    </label>
+                                    {form.Field({
+                                      name: 'numberOfPeriods',
+                                      children: (field) => (
+                                        <input
+                                          type="number"
+                                          className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-white"
+                                          placeholder="4"
+                                          min="1"
+                                          max="48"
+                                          value={field.state.value}
+                                          onChange={(e) => field.handleChange(Number(e.target.value))}
+                                        />
+                                      ),
+                                    })}
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Total number of fee reduction periods
+                                    </p>
+                                  </div>
+
+                                  <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                      Period Duration (Minutes)
+                                    </label>
+                                    {form.Field({
+                                      name: 'periodFrequency',
+                                      children: (field) => (
+                                        <input
+                                          type="number"
+                                          className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-white"
+                                          placeholder="30"
+                                          min="15"
+                                          max="60"
+                                          step="15"
+                                          value={field.state.value}
+                                          onChange={(e) => field.handleChange(Number(e.target.value))}
+                                        />
+                                      ),
+                                    })}
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Duration of each fee reduction period
+                                    </p>
+                                  </div>
+
+                                  <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                      Fee Reduction per Period (%)
+                                    </label>
+                                    {form.Field({
+                                      name: 'feeReductionFactor',
+                                      children: (field) => (
+                                        <input
+                                          type="number"
+                                          className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-white"
+                                          placeholder="5"
+                                          min="1"
+                                          max="10"
+                                          step="0.5"
+                                          value={field.state.value}
+                                          onChange={(e) => field.handleChange(Number(e.target.value))}
+                                        />
+                                      ),
+                                    })}
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Percentage fee reduction per period
+                                    </p>
+                                  </div>
+
+                                  <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                      Final Fee (%)
+                                    </label>
+                                    {form.Field({
+                                      name: 'finalFee',
+                                      children: (field) => (
+                                        <input
+                                          type="number"
+                                          className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-white"
+                                          placeholder="0.25"
+                                          min="0.25"
+                                          max="1"
+                                          step="0.05"
+                                          value={field.state.value}
+                                          onChange={(e) => field.handleChange(Number(e.target.value))}
+                                        />
+                                      ),
+                                    })}
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Minimum fee after all reductions (0.25-1% recommended)
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Fee Scheduler Preview */}
+                                <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                                  <h6 className="text-sm font-medium text-blue-200 mb-2">Fee Decay Preview</h6>
+                                  <div className="text-xs text-blue-300 space-y-1">
+                                    <p>• Starting fee: {form.getFieldValue('cliffFeeNumerator') || 30}%</p>
+                                    <p>• Total duration: {((form.getFieldValue('numberOfPeriods') || 4) * (form.getFieldValue('periodFrequency') || 30)) / 60} hours</p>
+                                    <p>• Fee reduction: {form.getFieldValue('feeReductionFactor') || 5}% per {form.getFieldValue('periodFrequency') || 30} minutes</p>
+                                    <p>• Final fee: {form.getFieldValue('finalFee') || 0.25}%</p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Rate Limiter Configuration */}
+                            {form.getFieldValue('enableAntiSniper') && form.getFieldValue('antiSniperMode') === 'rateLimiter' && (
+                              <div className="mt-6 pt-6 border-t border-white/10">
+                                <h5 className="text-lg font-semibold text-white mb-4">Rate Limiter Configuration</h5>
+                                <p className="text-gray-400 mb-4 text-sm">
+                                  Configure size-based fee increases to discourage large trades and bot activity.
+                                </p>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                  <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                      Reference Amount (USDC)
+                                    </label>
+                                    {form.Field({
+                                      name: 'referenceAmount',
+                                      children: (field) => (
+                                        <input
+                                          type="number"
+                                          className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-white"
+                                          placeholder="5"
+                                          min="1"
+                                          max="10"
+                                          step="1"
+                                          value={field.state.value}
+                                          onChange={(e) => field.handleChange(Number(e.target.value))}
+                                        />
+                                      ),
+                                    })}
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Trade size threshold for rate limiting (1-10 USDC recommended)
+                                    </p>
+                                  </div>
+
+                                  <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                      Fee Increment (%)
+                                    </label>
+                                    {form.Field({
+                                      name: 'feeIncrement',
+                                      children: (field) => (
+                                        <input
+                                          type="number"
+                                          className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-white"
+                                          placeholder="1"
+                                          min="0.5"
+                                          max="2"
+                                          step="0.1"
+                                          value={field.state.value}
+                                          onChange={(e) => field.handleChange(Number(e.target.value))}
+                                        />
+                                      ),
+                                    })}
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Additional fee per reference amount (0.5-2% recommended)
+                                    </p>
+                                  </div>
+
+                                  <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                      Max Duration (Hours)
+                                    </label>
+                                    {form.Field({
+                                      name: 'maxLimiterDuration',
+                                      children: (field) => (
+                                        <input
+                                          type="number"
+                                          className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-white"
+                                          placeholder="4"
+                                          min="1"
+                                          max="12"
+                                          step="1"
+                                          value={field.state.value}
+                                          onChange={(e) => field.handleChange(Number(e.target.value))}
+                                        />
+                                      ),
+                                    })}
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Maximum duration for rate limiting (≤12 hours)
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Rate Limiter Preview */}
+                                <div className="mt-4 p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                                  <h6 className="text-sm font-medium text-purple-200 mb-2">Rate Limiting Preview</h6>
+                                  <div className="text-xs text-purple-300 space-y-1">
+                                    <p>• Reference amount: {form.getFieldValue('referenceAmount') || 5} USDC</p>
+                                    <p>• Fee increment: +{form.getFieldValue('feeIncrement') || 1}% per {form.getFieldValue('referenceAmount') || 5} USDC</p>
+                                    <p>• Max duration: {form.getFieldValue('maxLimiterDuration') || 4} hours</p>
+                                    <p>• Max fee: {Math.min(25, (form.getFieldValue('feeIncrement') || 1) * (100 / (form.getFieldValue('referenceAmount') || 5))).toFixed(1)}% (capped at 25%)</p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
 
                           {/* Curve Behavior Preview */}
