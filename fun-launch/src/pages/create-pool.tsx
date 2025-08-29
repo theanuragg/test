@@ -262,7 +262,10 @@ export default function CreatePool() {
           console.error('Missing poolTx in response:', uploadData);
           throw new Error('Invalid response from upload API - missing poolTx');
         }
+        
         const { poolTx } = uploadData;
+        console.log('📦 Pool transaction received, Meteora should create metadata automatically');
+        
         const transaction = Transaction.from(Buffer.from(poolTx, 'base64'));
 
         // Step 2: Sign with keypair first
@@ -271,16 +274,16 @@ export default function CreatePool() {
         // Step 3: Then sign with user's wallet
         const signedTransaction = await signTransaction(transaction);
 
-        // Step 4: Send signed transaction
+        // Step 4: Send signed transaction (Meteora will create metadata)
         const sendResponse = await fetch('/api/send-transaction', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             signedTransaction: signedTransaction.serialize().toString('base64'),
             mint: keyPair.publicKey.toBase58(),
             userWallet: address,
+            tokenName: value.tokenName,
+            tokenSymbol: value.tokenSymbol,
           }),
         });
 

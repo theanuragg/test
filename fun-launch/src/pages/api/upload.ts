@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import AWS from 'aws-sdk';
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, PublicKey, Keypair } from '@solana/web3.js';
 import { DynamicBondingCurveClient } from '@meteora-ag/dynamic-bonding-curve-sdk';
 
 // Environment variables with type assertions
@@ -38,6 +38,16 @@ type UploadRequest = {
   userWallet: string;
 };
 
+type UploadResponse = {
+  success: boolean;
+  poolTx?: string;
+  imageUrl?: string;
+  metadataUrl?: string;
+  mintAddress?: string;
+  message?: string;
+  error?: string;
+};
+
 type Metadata = {
   name: string;
   symbol: string;
@@ -60,9 +70,9 @@ const r2 = new AWS.S3({
   signatureVersion: 'v4',
 });
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse<UploadResponse>) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ success: false, error: 'Method not allowed' });
   }
 
   try {
@@ -70,19 +80,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Validate required fields
     if (!tokenLogo || !tokenName || !tokenSymbol || !mint || !userWallet) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      return res.status(400).json({ success: false, error: 'Missing required fields' });
     }
 
-    // Upload image and metadata
+    console.log('🚀 Starting token creation with metadata for:', { tokenName, tokenSymbol, mint });
+    console.log('🔍 DEBUGGING: Will check if Meteora creates metadata properly...');
+
+    // Setup connection
+    const connection = new Connection(RPC_URL, 'confirmed');
+    const payerPublicKey = new PublicKey(userWallet);
+    const mintPublicKey = new PublicKey(mint);
+
+    // Upload image and metadata to R2
     const imageUrl = await uploadImage(tokenLogo, mint);
     if (!imageUrl) {
-      return res.status(400).json({ error: 'Failed to upload image' });
+      return res.status(400).json({ success: false, error: 'Failed to upload image' });
     }
 
     const metadataUrl = await uploadMetadata({ tokenName, tokenSymbol, mint, image: imageUrl });
     if (!metadataUrl) {
-      return res.status(400).json({ error: 'Failed to upload metadata' });
+      return res.status(400).json({ success: false, error: 'Failed to upload metadata' });
     }
+
+    console.log('✅ Uploaded metadata to R2:', metadataUrl);
 
     // Create pool transaction
     const poolTx = await createPoolTransaction({
@@ -93,7 +113,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       userWallet,
     });
 
-    res.status(200).json({
+    console.log('✅ Pool transaction created!');
+    console.log('📝 JSON metadata uploaded to R2:', metadataUrl);
+    console.log('🖼️ Image uploaded to R2:', imageUrl);
+    console.log('🔍 Meteora SDK should create metadata account automatically');
+    console.log('📋 Debug your token after creation using: /api/debug-token-metadata');
+
+    const response: UploadResponse = {
       success: true,
       poolTx: poolTx
         .serialize({
@@ -101,7 +127,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           verifySignatures: false,
         })
         .toString('base64'),
-    });
+      imageUrl,
+      metadataUrl,
+      mintAddress: mint,
+      message: `✅ Pool transaction ready! Meteora should create metadata account with name: ${tokenName}`,
+    };
+
+    res.status(200).json(response);
   } catch (error) {
     console.error('Upload error:', error);
     
@@ -113,7 +145,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       errorMessage = error;
     }
     
-    res.status(500).json({ error: errorMessage });
+    res.status(500).json({ success: false, error: errorMessage });
   }
 }
 
@@ -161,11 +193,25 @@ async function uploadMetadata(params: MetadataUploadParams): Promise<string | fa
   };
   const fileName = `metadata/${params.mint}.json`;
 
+  console.log('📝 Uploading metadata to R2...');
+  console.log('📄 Metadata content:', JSON.stringify(metadata, null, 2));
+  console.log('📂 File name:', fileName);
+  console.log('🔗 Expected URL:', `${PUBLIC_R2_URL}/${fileName}`);
+
   try {
-    await uploadToR2(Buffer.from(JSON.stringify(metadata, null, 2)), 'application/json', fileName);
+    const uploadResult = await uploadToR2(Buffer.from(JSON.stringify(metadata, null, 2)), 'application/json', fileName);
+    console.log('✅ R2 upload result:', uploadResult);
+    console.log('🎯 Metadata should be accessible at:', `${PUBLIC_R2_URL}/${fileName}`);
+    
     return `${PUBLIC_R2_URL}/${fileName}`;
   } catch (error) {
-    console.error('Error uploading metadata:', error);
+    console.error('❌ Error uploading metadata to R2:', error);
+    console.error('📋 Upload details:', {
+      fileName,
+      metadataSize: JSON.stringify(metadata).length,
+      bucket: R2_BUCKET,
+      publicUrl: PUBLIC_R2_URL,
+    });
     return false;
   }
 }
