@@ -1,6 +1,7 @@
 import { useMemo, useState, useCallback } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import { z } from 'zod';
 import Header from '../components/Header';
 
@@ -172,6 +173,7 @@ function ImageInput({ field }: { field: any }) {
 export default function CreatePool() {
   const { publicKey, signTransaction } = useWallet();
   const address = useMemo(() => publicKey?.toBase58(), [publicKey]);
+  const router = useRouter();
 
   const [isLoading, setIsLoading] = useState(false);
   const [poolCreated, setPoolCreated] = useState(false);
@@ -206,7 +208,7 @@ export default function CreatePool() {
           return;
         }
 
-        if (!signTransaction) {
+        if (!signTransaction || !address) {
           toast.error('Wallet not connected');
           return;
         }
@@ -237,11 +239,30 @@ export default function CreatePool() {
         });
 
         if (!uploadResponse.ok) {
-          const error = await uploadResponse.json();
-          throw new Error(error.error);
+          let errorMessage = 'Upload failed';
+          try {
+            const errorData = await uploadResponse.json();
+            errorMessage = errorData?.error || errorMessage;
+          } catch (parseError) {
+            console.error('Failed to parse error response:', parseError);
+            errorMessage = `Upload failed with status ${uploadResponse.status}`;
+          }
+          throw new Error(errorMessage);
         }
 
-        const { poolTx } = await uploadResponse.json();
+        let uploadData;
+        try {
+          uploadData = await uploadResponse.json();
+        } catch (parseError) {
+          console.error('Failed to parse upload response:', parseError);
+          throw new Error('Invalid response from upload API');
+        }
+        
+        if (!uploadData?.poolTx) {
+          console.error('Missing poolTx in response:', uploadData);
+          throw new Error('Invalid response from upload API - missing poolTx');
+        }
+        const { poolTx } = uploadData;
         const transaction = Transaction.from(Buffer.from(poolTx, 'base64'));
 
         // Step 2: Sign with keypair first
@@ -258,22 +279,56 @@ export default function CreatePool() {
           },
           body: JSON.stringify({
             signedTransaction: signedTransaction.serialize().toString('base64'),
+            mint: keyPair.publicKey.toBase58(),
+            userWallet: address,
           }),
         });
 
         if (!sendResponse.ok) {
-          const error = await sendResponse.json();
-          throw new Error(error.error);
+          let errorMessage = 'Transaction failed';
+          try {
+            const errorData = await sendResponse.json();
+            errorMessage = errorData?.error || errorMessage;
+          } catch (parseError) {
+            console.error('Failed to parse error response:', parseError);
+            errorMessage = `Transaction failed with status ${sendResponse.status}`;
+          }
+          throw new Error(errorMessage);
         }
 
-        const { success } = await sendResponse.json();
+        let sendData;
+        try {
+          sendData = await sendResponse.json();
+        } catch (parseError) {
+          console.error('Failed to parse send response:', parseError);
+          throw new Error('Invalid response from transaction API');
+        }
+        
+        if (!sendData?.success) {
+          console.error('Transaction failed:', sendData);
+          throw new Error('Transaction failed');
+        }
+        const { success } = sendData;
         if (success) {
           toast.success('Pool created successfully');
           setPoolCreated(true);
+          
+          // If we got immediate pool data, redirect to token page
+          if (sendData.poolData?.tokenMint) {
+            console.log('🚀 Redirecting to token page with immediate pool data:', sendData.poolData);
+            router.push(`/token/${sendData.poolData.tokenMint}`);
+          } else if (sendData.poolData?.poolAddress) {
+            // Fallback: redirect using pool address
+            router.push(`/token/${sendData.poolData.poolAddress}`);
+          } else {
+            // Final fallback: go to explore pools
+            router.push(`/explore-pools`);
+          }
         }
       } catch (error) {
         console.error('Error creating pool:', error);
-        toast.error(error instanceof Error ? error.message : 'Failed to create pool');
+        const errorMessage = error instanceof Error ? error.message : 'Failed to create pool';
+        toast.error(errorMessage);
       } finally {
         setIsLoading(false);
       }

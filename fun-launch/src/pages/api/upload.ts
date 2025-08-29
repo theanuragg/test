@@ -23,7 +23,11 @@ if (
 }
 
 const PRIVATE_R2_URL = `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
-const PUBLIC_R2_URL = 'https://pub-85c7f5f0dc104dc784e656b623d999e5.r2.dev'; // (where can we got this)
+const PUBLIC_R2_URL = process.env.R2_PUBLIC_URL  || 'https://pub-0047415c6eef40ddb3797845cba68874.r2.dev';
+
+if (!PUBLIC_R2_URL) {
+  throw new Error('Missing required environment variable: R2_PUBLIC_URL');
+}
 
 // Types
 type UploadRequest = {
@@ -100,27 +104,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   } catch (error) {
     console.error('Upload error:', error);
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    
+    // Provide more specific error messages
+    let errorMessage = 'Unknown error';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    }
+    
+    res.status(500).json({ error: errorMessage });
   }
 }
 
+// Increase body size limit to accommodate base64-encoded images (<2MB raw ~ ~2.7MB base64)
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '5mb',
+    },
+  },
+};
+
 async function uploadImage(tokenLogo: string, mint: string): Promise<string | false> {
-  const matches = tokenLogo.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
-  if (!matches || matches.length !== 3) {
-    return false;
-  }
-
-  const [, contentType, base64Data] = matches;
-
-  if (!contentType || !base64Data) {
-    return false;
-  }
-
-  const fileBuffer = Buffer.from(base64Data, 'base64');
-  const fileName = `images/${mint}.${contentType.split('/')[1]}`;
-
   try {
+    const matches = tokenLogo.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      console.error('Invalid base64 format');
+      return false;
+    }
+
+    const [, contentType, base64Data] = matches;
+
+    if (!contentType || !base64Data) {
+      console.error('Missing contentType or base64Data');
+      return false;
+    }
+
+    const fileBuffer = Buffer.from(base64Data, 'base64');
+    const fileName = `tokens/${mint}.${contentType.split('/')[1]}`;
+
     await uploadToR2(fileBuffer, contentType, fileName);
+    console.log('fileName', `${PUBLIC_R2_URL}/${fileName}`);
     return `${PUBLIC_R2_URL}/${fileName}`;
   } catch (error) {
     console.error('Error uploading image:', error);
@@ -157,6 +182,7 @@ async function uploadToR2(
         Key: fileName,
         Body: fileBuffer,
         ContentType: contentType,
+        ACL: 'public-read', // Make the file publicly readable
       },
       (err, data) => {
         if (err) {
