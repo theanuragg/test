@@ -11,7 +11,7 @@ import { useWallet } from '@jup-ag/wallet-adapter';
 // import { useTokenData, usePriceHistory, useSwapQuote } from '../../hooks/useJupiterAPI'; // COMMENTED OUT - Jupiter APIs causing issues
 // import { useHeliusTokenData } from '../../hooks/useHeliusIndexing'; // COMMENTED OUT - EventEmitter issues in Next.js
 import { toast } from 'react-hot-toast';
-import { useDbcPoolDataByToken } from '../../hooks/useDbcPool';
+// import { useDbcPoolDataByToken } from '../../hooks/useDbcPool'; // REMOVED - Not used
 // import { TokenHeader } from '../../components/Token/TokenHeader'; // COMMENTED OUT - Jupiter dependencies
 // import { PriceChart } from '../../components/Token/PriceChart'; // COMMENTED OUT - Jupiter dependencies
 import { MetricsGrid } from '../../components/Token/MetricsGrid';
@@ -20,6 +20,8 @@ import { MetricsGrid } from '../../components/Token/MetricsGrid';
 // import { CreatorActions } from '../../components/Token/CreatorActions'; // COMMENTED OUT - Jupiter dependencies
 import { BondingCurveProgress } from '../../components/Token/BondingCurveProgress';
 import { MigrationStatus } from '../../components/Token/MigrationStatus';
+import LaunchpadStatus from '../../components/Token/LaunchpadStatus';
+import DbcSwapInterface from '../../components/Token/DbcSwapInterface';
 
 export default function TokenDetailPage() {
   const router = useRouter();
@@ -28,32 +30,18 @@ export default function TokenDetailPage() {
   
   const [timeframe, setTimeframe] = useState<'4H' | '1D' | '1W' | '1M' | 'All'>('1D');
   
-  // Simple check - only wait for tokenId from URL  
-  if (!tokenId) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b text-white flex items-center justify-center">
-        <div className="bg-white/5 rounded-xl p-6 max-w-md text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
-          <h2 className="text-xl font-semibold mb-2">Loading Token...</h2>
-          <p className="text-gray-300 text-sm">Waiting for URL parameters...</p>
-        </div>
-      </div>
-    );
-  }
-
+  // Convert tokenId to string safely
   const tokenIdString = Array.isArray(tokenId) ? tokenId[0] : tokenId;
-  
-  // TEMPORARILY DISABLED - Helius APIs having EventEmitter issues in Next.js
-  // const { data: heliusData, loading: heliusLoading, error: heliusError } = useHeliusTokenData(tokenId as string, {
-  //   includeTransactions: true,
-  //   includeBalances: true,
-  //   transactionLimit: 10,
-  // });
   
   // Use our working token-info API with proper loading management
   const [heliusData, setHeliusData] = useState<any>(null);
   const [heliusLoading, setHeliusLoading] = useState(true); // Start with true
   const [heliusError, setHeliusError] = useState<string | null>(null);
+  
+  // Disable auto-refresh DBC data to prevent infinite loading
+  const [dbcData, setDbcData] = useState<any>(null);
+  const [dbcLoading, setDbcLoading] = useState(false);
+  const [dbcError, setDbcError] = useState<string | null>(null);
   
   useEffect(() => {
     if (!tokenIdString) {
@@ -101,32 +89,60 @@ export default function TokenDetailPage() {
 
     return () => clearTimeout(timer);
   }, [tokenIdString]);
-  // Disable auto-refresh DBC data to prevent infinite loading
-  const [dbcData, setDbcData] = useState<any>(null);
-  const [dbcLoading, setDbcLoading] = useState(false);
-  const [dbcError, setDbcError] = useState<string | null>(null);
   
-  // DBC data - set once without auto-refresh
+  // Fetch real DBC pool data
   useEffect(() => {
     if (!tokenIdString) return;
     
-    console.log('ℹ️ DBC pool data disabled to prevent infinite loading');
-    console.log('📊 Showing token metadata only for:', tokenIdString);
+    console.log('🔍 Fetching real DBC pool data for:', tokenIdString);
+    setDbcLoading(true);
+    setDbcError(null);
     
-    // Set mock data once - no loading state changes
-    setTimeout(() => {
+    fetch('/api/dbc/pool-by-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tokenMint: tokenIdString }),
+    })
+    .then(async (response) => {
+      const data = await response.json();
+      if (data.success) {
+        console.log('✅ Real DBC pool data loaded:', data.poolData);
+        setDbcData(data.poolData);
+      } else {
+        console.warn('⚠️ No DBC pool found for token:', tokenIdString);
+        // Set fallback data if no pool found
+        setDbcData({
+          poolAddress: 'No pool found',
+          progress: 0,
+          marketCap: 0,
+          currentPrice: 0,
+          volume24h: 0,
+          migrationStatus: 'no-pool',
+          isMigrated: 0,
+          migrationProgress: 0,
+          accumulatedFees: 0,
+        });
+      }
+    })
+    .catch((error) => {
+      console.error('❌ DBC pool fetch error:', error);
+      setDbcError(error.message);
+      // Set fallback data on error
       setDbcData({
-        poolAddress: 'CnSEZP3JdVDxufJaZKTGB7xrXpb5HdN98bFRirqJXyRH', // Your actual pool from transaction
+        poolAddress: 'Error loading pool',
         progress: 0,
         marketCap: 0,
         currentPrice: 0,
         volume24h: 0,
-        migrationStatus: 'pre-bonding',
+        migrationStatus: 'error',
         isMigrated: 0,
         migrationProgress: 0,
         accumulatedFees: 0,
       });
-    }, 200);
+    })
+    .finally(() => {
+      setDbcLoading(false);
+    });
   }, [tokenIdString]);
   
   // Debug logging to track re-renders (limited frequency)
@@ -140,10 +156,6 @@ export default function TokenDetailPage() {
     renderTime: new Date().toLocaleTimeString(),
     renderKey: renderCount.toString().slice(-4),
   });
-  
-  // COMMENTED OUT - Jupiter APIs causing issues
-  // const { history: priceHistory, loading: historyLoading } = usePriceHistory(tokenId as string, 7);
-  // const { quote, loading: quoteLoading, getQuote } = useSwapQuote();
   
   // Debug logging
   console.log('🔍 Token Page Debug:', {
@@ -165,7 +177,7 @@ export default function TokenDetailPage() {
 
     return {
       price: {
-        id: tokenId as string,
+        id: tokenIdString || '',
         price: dbcData?.currentPrice || 0,
         marketCap: dbcData?.marketCap || 0,
         priceChange24h: 0,
@@ -176,8 +188,8 @@ export default function TokenDetailPage() {
         vsTokenSymbol: 'USDC',
       },
       info: {
-        address: (tokenId as string) || '',
-        name: heliusData?.metadata?.name || `Token ${typeof tokenId === 'string' ? tokenId.slice(0, 8) : 'Loading'}...`,
+        address: tokenIdString || '',
+        name: heliusData?.metadata?.name || `Token ${tokenIdString ? tokenIdString.slice(0, 8) : 'Loading'}...`,
         symbol: heliusData?.metadata?.symbol || 'TOKEN',
         decimals: heliusData?.metadata?.decimals || 9,
         logoURI: heliusData?.metadata?.image || '/coins/unknown.svg',
@@ -198,6 +210,19 @@ export default function TokenDetailPage() {
   const historyLoading = false;
   const tokenLoading = heliusLoading || dbcLoading;
   const tokenError = heliusError || dbcError;
+
+  // NOW check for tokenId after all hooks are called
+  if (!tokenId) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b text-white flex items-center justify-center">
+        <div className="bg-white/5 rounded-xl p-6 max-w-md text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
+          <h2 className="text-xl font-semibold mb-2">Loading Token...</h2>
+          <p className="text-gray-300 text-sm">Waiting for URL parameters...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Loading state - show loading while fetching initial data
   if (heliusLoading || dbcLoading) {
@@ -397,6 +422,21 @@ export default function TokenDetailPage() {
               ]}
             />
 
+            {/* Launchpad Status */}
+            {dbcData && (
+              <LaunchpadStatus
+                progress={dbcData.launchpadProgress || 0}
+                phase={dbcData.launchpadPhase || 'Launching'}
+                description={dbcData.launchpadDescription || 'Token is in presale phase'}
+                tokensSold={dbcData.tokensSold || 0}
+                tokensRemaining={dbcData.tokensRemaining || 0}
+                graduationCountdown={dbcData.graduationCountdown}
+                isGraduated={dbcData.isGraduated || false}
+                currentPrice={dbcData.currentPrice || 0}
+                marketCap={dbcData.marketCap || 0}
+              />
+            )}
+
             {/* Bonding Curve Progress & Migration Status */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <BondingCurveProgress 
@@ -413,13 +453,24 @@ export default function TokenDetailPage() {
               />
             </div>
 
-            {/* Trading Interface - TEMPORARILY DISABLED */}
+            {/* DBC Swap Interface */}
+            {publicKey && dbcData?.poolAddress && (
+              <DbcSwapInterface
+                poolAddress={dbcData.poolAddress}
+                baseMint={dbcData.baseMint || tokenIdString}
+                quoteMint={dbcData.quoteMint || 'Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr'} // Devnet USDC
+                tokenName={tokenData?.info?.name || 'Unknown Token'}
+                tokenSymbol={tokenData?.info?.symbol || 'UNKNOWN'}
+              />
+            )}
+
+            {/* Legacy Trading Interface - DISABLED */}
             {publicKey && false && (
               <div className="bg-white/5 rounded-xl p-6 backdrop-blur-sm border border-white/10">
                 <div className="text-center py-8">
-                  <h3 className="text-lg font-semibold mb-2">Trading Interface</h3>
+                  <h3 className="text-lg font-semibold mb-2">Legacy Trading Interface</h3>
                   <p className="text-gray-400 text-sm">
-                    Trading interface temporarily disabled while fixing Jupiter API integration.
+                    Legacy trading interface disabled. Use DBC Swap Interface above.
                   </p>
                   <p className="text-gray-500 text-xs mt-2">
                     DBC pool address: {dbcData?.poolAddress}
@@ -517,6 +568,22 @@ export default function TokenDetailPage() {
                 </div>
               )}
             </div>
+
+            {/* Add Liquidity Button - Show if market cap is 0 */}
+            {dbcData?.marketCap === 0 && publicKey && (
+              <div className="bg-green-500/10 rounded-xl p-6 backdrop-blur-sm border border-green-500/20 mb-6">
+                <h3 className="text-lg font-semibold mb-4 text-green-200">💰 Add Initial Liquidity</h3>
+                <p className="text-green-300 text-sm mb-4">
+                  Your pool needs initial USDC liquidity to achieve the target market cap of $5000.
+                </p>
+                <a
+                  href="/add-liquidity"
+                  className="inline-block bg-gradient-to-r from-green-500 to-blue-500 hover:opacity-90 px-6 py-3 rounded-lg font-semibold text-white transition"
+                >
+                  Add $5000 USDC Liquidity
+                </a>
+              </div>
+            )}
 
             {/* Debug Information - Show what data we have */}
             <div className="bg-yellow-500/10 rounded-xl p-6 backdrop-blur-sm border border-yellow-500/20">

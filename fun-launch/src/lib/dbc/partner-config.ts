@@ -2,10 +2,9 @@
  * Partner DBC Configuration
  * 
  * This module defines the pre-configured DBC settings for the launchpad.
- * This config key will be used for all token launches on the platform.
+ * Based on official Meteora documentation and best practices.
  */
 
-import { BN } from 'bn.js';
 import { PublicKey } from '@solana/web3.js';
 
 // Partner's wallet addresses (replace with actual addresses)
@@ -87,6 +86,7 @@ export interface PartnerDbcConfig {
 
 /**
  * Generate partner DBC configuration for different networks and quote tokens
+ * Based on official Meteora documentation
  */
 export function generatePartnerDbcConfig(
   network: 'mainnet' | 'devnet' = 'mainnet',
@@ -111,26 +111,35 @@ export function generatePartnerDbcConfig(
     quoteMint,
     
     dbcConfig: {
-      buildCurveMode: 1, // buildCurveWithMarketCap
+      // Build Curve Mode: 1 = buildCurveWithMarketCap (official Meteora mode)
+      buildCurveMode: 1,
+      
+      // Market Cap Configuration (in USD)
       initialMarketCap: 5000, // $5K starting market cap
       migrationMarketCap: 75000, // $75K migration threshold
-      totalTokenSupply: 1000000000, // 1B tokens
-      migrationOption: 1, // Migrate to DAMM v2
-      tokenBaseDecimal: 9,
+      
+      // Token Supply: 1B tokens (standard for launchpads)
+      totalTokenSupply: 1000000000,
+      
+      // Migration: 1 = Migrate to DAMM v2 (official Meteora migration)
+      migrationOption: 1,
+      
+      // Token Decimals
+      tokenBaseDecimal: 9, // Standard for most tokens
       tokenQuoteDecimal,
       
-      // Vesting: 10% of tokens locked for 6 months
+      // Vesting: 10% of tokens locked for 6 months (standard vesting)
       lockedVestingParam: {
         totalLockedVestingAmount: 100000000, // 100M tokens (10%)
-        numberOfVestingPeriod: 24, // 24 periods
-        cliffUnlockAmount: 100000000, // All tokens in cliff
-        totalVestingDuration: 2592000, // 30 days in seconds
+        numberOfVestingPeriod: 24, // 24 periods (monthly unlocks)
+        cliffUnlockAmount: 0, // No cliff unlock
+        totalVestingDuration: 15768000, // 6 months in seconds (182.5 days)
         cliffDurationFromMigrationTime: 0, // No cliff delay
       },
       
-      // Fee Schedule: 2% flat fee with anti-sniping
+      // Fee Schedule: 2% flat fee (standard launchpad fee)
       baseFeeParams: {
-        baseFeeMode: 0, // Flat fee
+        baseFeeMode: 0, // Flat fee mode
         feeSchedulerParam: {
           startingFeeBps: 200, // 2% starting fee
           endingFeeBps: 200, // 2% ending fee
@@ -139,10 +148,10 @@ export function generatePartnerDbcConfig(
         },
       },
       
-      // Advanced Settings
+      // Advanced Settings (based on official Meteora docs)
       dynamicFeeEnabled: true, // Anti-sniping protection
-      activationType: 1, // Timestamp-based
-      collectFeeMode: 0, // Quote token fees
+      activationType: 1, // Timestamp-based activation
+      collectFeeMode: 0, // Quote token fees (USDC)
       migrationFeeOption: 3, // 2% LP fee on migration
       tokenType: 0, // SPL token
       
@@ -155,7 +164,7 @@ export function generatePartnerDbcConfig(
       
       // Fee Collection
       leftover: 0, // No leftover
-      tokenUpdateAuthority: 1, // Immutable
+      tokenUpdateAuthority: 1, // Immutable (cannot be changed)
       migrationFee: {
         feePercentage: 0, // No migration fee
         creatorFeePercentage: 0, // No creator migration fee
@@ -219,6 +228,11 @@ export function validatePartnerDbcConfig(config: PartnerDbcConfig): {
     errors.push('Creator trading fee percentage must be between 0 and 100');
   }
 
+  // Validate build curve mode
+  if (config.dbcConfig.buildCurveMode !== 1) {
+    errors.push('Build curve mode must be 1 (buildCurveWithMarketCap) for launchpads');
+  }
+
   return {
     isValid: errors.length === 0,
     errors,
@@ -244,4 +258,51 @@ export function getConfigSummary(config: PartnerDbcConfig): {
     tradingFee: `${(config.dbcConfig.baseFeeParams.feeSchedulerParam.startingFeeBps / 100).toFixed(1)}%`,
     lpDistribution: `${config.dbcConfig.creatorLpPercentage + config.dbcConfig.creatorLockedLpPercentage}% Creator / ${config.dbcConfig.partnerLpPercentage + config.dbcConfig.partnerLockedLpPercentage}% Partner`,
   };
+}
+
+/**
+ * Calculate bonding curve progress using official Meteora formula
+ * Based on: https://docs.meteora.ag/overview/products/dbc/bonding-curve-formulas
+ */
+export function calculateBondingCurveProgress(
+  currentBaseReserve: number,
+  totalTokenSupply: number = 1000000000,
+  reservedTokens: number = 206900000
+): number {
+  // Official Meteora formula: Progress = 100 - ((leftTokens * 100) / availableForSale)
+  const availableForSale = totalTokenSupply - reservedTokens;
+  const leftTokens = Math.max(0, currentBaseReserve - reservedTokens);
+  const progress = 100 - ((leftTokens * 100) / availableForSale);
+  
+  return Math.max(0, Math.min(100, progress));
+}
+
+/**
+ * Calculate token price using official Meteora bonding curve formula
+ * Based on: https://docs.meteora.ag/overview/products/dbc/bonding-curve-formulas
+ */
+export function calculateTokenPrice(
+  quoteReserve: number,
+  baseReserve: number,
+  quoteDecimals: number = 6
+): number {
+  if (baseReserve === 0) return 0;
+  
+  // Price = quoteReserve / baseReserve
+  const price = quoteReserve / baseReserve;
+  
+  // Convert to proper decimal format
+  return price / Math.pow(10, quoteDecimals);
+}
+
+/**
+ * Calculate market cap using official Meteora formula
+ */
+export function calculateMarketCap(
+  price: number,
+  totalSupply: number,
+  baseDecimals: number = 9
+): number {
+  const totalSupplyInTokens = totalSupply / Math.pow(10, baseDecimals);
+  return price * totalSupplyInTokens;
 }
