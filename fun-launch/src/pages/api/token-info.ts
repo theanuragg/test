@@ -4,6 +4,9 @@ import { Connection, PublicKey } from '@solana/web3.js';
 const RPC_URL = process.env.RPC_URL || 'https://api.devnet.solana.com';
 const TOKEN_METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
 
+// R2 Configuration
+const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL;
+
 interface TokenInfoResponse {
   success: boolean;
   tokenInfo?: {
@@ -25,6 +28,39 @@ interface TokenInfoResponse {
     isMigrated?: boolean;
   };
   error?: string;
+}
+
+/**
+ * Check if a token image exists in R2 storage
+ */
+async function checkR2Image(tokenMint: string): Promise<string | null> {
+  if (!R2_PUBLIC_URL) return null;
+  
+  try {
+    // Try different image formats
+    const imageFormats = ['png', 'jpg', 'jpeg', 'svg'];
+    
+    for (const format of imageFormats) {
+      const imageUrl = `${R2_PUBLIC_URL}/tokens/${tokenMint}.${format}`;
+      
+      try {
+        const response = await fetch(imageUrl, { method: 'HEAD' });
+        if (response.ok) {
+          console.log(`🖼️ Found R2 image for ${tokenMint}: ${imageUrl}`);
+          return imageUrl;
+        }
+      } catch (e) {
+        // Continue to next format
+        continue;
+      }
+    }
+    
+    console.log(`ℹ️ No R2 image found for ${tokenMint}`);
+    return null;
+  } catch (error) {
+    console.warn(`Error checking R2 image for ${tokenMint}:`, error);
+    return null;
+  }
 }
 
 export default async function handler(
@@ -51,6 +87,7 @@ export default async function handler(
     }
 
     console.log('🔍 Fetching comprehensive token info for:', mintAddress);
+    console.log('R2_PUBLIC_URL:', R2_PUBLIC_URL);
 
     const connection = new Connection(RPC_URL, 'confirmed');
     const mintPublicKey = new PublicKey(mintAddress);
@@ -130,10 +167,11 @@ export default async function handler(
       }
     }
 
-    // Try to fetch JSON metadata if URI exists
+    // Image priority: Metadata URI -> R2 -> Placeholder
     let imageUrl: string | undefined;
     let description: string | undefined;
 
+    // 1. Try to fetch JSON metadata if URI exists
     if (parsedMetadata.uri) {
       try {
         console.log('🔗 Fetching JSON metadata from:', parsedMetadata.uri);
@@ -150,6 +188,24 @@ export default async function handler(
       } catch (jsonError) {
         console.warn('⚠️ Failed to fetch JSON metadata:', jsonError);
       }
+    }
+
+    // 2. Try R2 storage as fallback if no image from metadata
+    if (!imageUrl) {
+      console.log(`🔍 Checking R2 storage for image: ${mintAddress}`);
+      const r2ImageUrl = await checkR2Image(mintAddress);
+      if (r2ImageUrl) {
+        imageUrl = r2ImageUrl;
+        console.log('🖼️ Using R2 image for', mintAddress);
+      } else {
+        console.log('ℹ️ No R2 image found for', mintAddress);
+      }
+    }
+
+    // 3. Use placeholder as last resort
+    if (!imageUrl) {
+      imageUrl = `https://via.placeholder.com/64x64/6366f1/ffffff?text=${parsedMetadata.symbol.charAt(0)}`;
+      console.log('🖼️ Using placeholder image for', mintAddress, 'symbol:', parsedMetadata.symbol);
     }
 
     const tokenInfo = {

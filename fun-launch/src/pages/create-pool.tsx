@@ -264,7 +264,7 @@ export default function CreatePool() {
         }
         
         const { poolTx } = uploadData;
-        console.log('📦 Pool transaction received, Meteora should create metadata automatically');
+        console.log('📦 Pool transaction received, Meteora DBC will create metadata automatically');
         
         const transaction = Transaction.from(Buffer.from(poolTx, 'base64'));
 
@@ -274,7 +274,7 @@ export default function CreatePool() {
         // Step 3: Then sign with user's wallet
         const signedTransaction = await signTransaction(transaction);
 
-        // Step 4: Send signed transaction (Meteora will create metadata)
+        // Step 4: Send signed transaction (Meteora DBC will create metadata)
         const sendResponse = await fetch('/api/send-transaction', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

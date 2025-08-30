@@ -11,6 +11,42 @@ const HELIUS_API_KEY = process.env.HELIUS_API_KEY ||
 const PARTNER_CONFIG_KEY = decodeURIComponent(process.env.POOL_CONFIG_KEY as string || '');
 const RPC_URL = process.env.RPC_URL || `https://devnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
+// R2 Configuration
+const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL;
+
+/**
+ * Check if a token image exists in R2 storage
+ */
+async function checkR2Image(tokenMint: string): Promise<string | null> {
+  if (!R2_PUBLIC_URL) return null;
+  
+  try {
+    // Try different image formats
+    const imageFormats = ['png', 'jpg', 'jpeg', 'svg'];
+    
+    for (const format of imageFormats) {
+      const imageUrl = `${R2_PUBLIC_URL}/tokens/${tokenMint}.${format}`;
+      
+      try {
+        const response = await fetch(imageUrl, { method: 'HEAD' });
+        if (response.ok) {
+          console.log(`🖼️ Found R2 image for ${tokenMint}: ${imageUrl}`);
+          return imageUrl;
+        }
+      } catch (e) {
+        // Continue to next format
+        continue;
+      }
+    }
+    
+    console.log(`ℹ️ No R2 image found for ${tokenMint}`);
+    return null;
+  } catch (error) {
+    console.warn(`Error checking R2 image for ${tokenMint}:`, error);
+    return null;
+  }
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -19,6 +55,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log('HELIUS_API_KEY exists:', !!HELIUS_API_KEY);
     console.log('PARTNER_CONFIG_KEY:', PARTNER_CONFIG_KEY);
     console.log('RPC_URL:', RPC_URL);
+    console.log('R2_PUBLIC_URL:', R2_PUBLIC_URL);
     
     if (!HELIUS_API_KEY || !PARTNER_CONFIG_KEY) {
       console.log('Missing required env vars');
@@ -174,7 +211,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       )
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-    // Enrich pools with token metadata using Helius getAsset
+    // Enrich pools with token metadata using Helius getAsset and R2 fallback
     const enrichedPools = await Promise.all(
       uniquePools.map(async (pool) => {
         const enrichedPool = { ...pool };
@@ -202,19 +239,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             console.log(`ℹ️ No metadata found for token: ${pool.tokenMint}`);
           }
 
-          // Use actual image from Helius if available, otherwise placeholder
+          // Image priority: Helius -> R2 -> Placeholder
+          let imageUrl = null;
+          
+          // 1. Try Helius image first
           if (tokenMetadata.image) {
-            enrichedPool.imageUrl = tokenMetadata.image;
+            imageUrl = tokenMetadata.image;
             console.log('🖼️ Using Helius image for', pool.tokenMint);
           } else {
-            enrichedPool.imageUrl = `https://via.placeholder.com/64x64/6366f1/ffffff?text=${(enrichedPool.symbol || 'T').charAt(0)}`;
-            console.log('🖼️ Using placeholder image for', pool.tokenMint, 'symbol:', enrichedPool.symbol);
+            // 2. Try R2 storage as fallback
+            console.log(`🔍 Checking R2 storage for image: ${pool.tokenMint}`);
+            const r2ImageUrl = await checkR2Image(pool.tokenMint);
+            if (r2ImageUrl) {
+              imageUrl = r2ImageUrl;
+              console.log('🖼️ Using R2 image for', pool.tokenMint);
+            } else {
+              // 3. Use placeholder as last resort
+              imageUrl = `https://via.placeholder.com/64x64/6366f1/ffffff?text=${(enrichedPool.symbol || 'T').charAt(0)}`;
+              console.log('🖼️ Using placeholder image for', pool.tokenMint, 'symbol:', enrichedPool.symbol);
+            }
           }
-        } catch (e) {
-          console.warn('Failed to fetch Helius metadata for', pool.tokenMint, e);
           
-          // Fallback to placeholder
-          enrichedPool.imageUrl = `https://via.placeholder.com/64x64/6366f1/ffffff?text=T`;
+          enrichedPool.imageUrl = imageUrl;
+          
+        } catch (e) {
+          console.warn('Failed to fetch metadata for', pool.tokenMint, e);
+          
+          // Try R2 as fallback even if Helius failed
+          try {
+            const r2ImageUrl = await checkR2Image(pool.tokenMint);
+            if (r2ImageUrl) {
+              enrichedPool.imageUrl = r2ImageUrl;
+              console.log('🖼️ Using R2 image as fallback for', pool.tokenMint);
+            } else {
+              enrichedPool.imageUrl = `https://via.placeholder.com/64x64/6366f1/ffffff?text=T`;
+            }
+          } catch (r2Error) {
+            console.warn('R2 fallback also failed for', pool.tokenMint, r2Error);
+            enrichedPool.imageUrl = `https://via.placeholder.com/64x64/6366f1/ffffff?text=T`;
+          }
         }
 
         return enrichedPool;

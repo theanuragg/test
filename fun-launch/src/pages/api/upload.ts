@@ -84,7 +84,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     }
 
     console.log('🚀 Starting token creation with metadata for:', { tokenName, tokenSymbol, mint });
-    console.log('🔍 DEBUGGING: Will check if Meteora creates metadata properly...');
+    console.log('🔍 Meteora DBC will create metadata account automatically');
 
     // Setup connection
     const connection = new Connection(RPC_URL, 'confirmed');
@@ -104,7 +104,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
     console.log('✅ Uploaded metadata to R2:', metadataUrl);
 
-    // Create pool transaction
+    // Create pool transaction (Meteora DBC handles metadata account creation)
     const poolTx = await createPoolTransaction({
       mint,
       tokenName,
@@ -116,8 +116,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     console.log('✅ Pool transaction created!');
     console.log('📝 JSON metadata uploaded to R2:', metadataUrl);
     console.log('🖼️ Image uploaded to R2:', imageUrl);
-    console.log('🔍 Meteora SDK should create metadata account automatically');
-    console.log('📋 Debug your token after creation using: /api/debug-token-metadata');
+    console.log('🔍 Meteora DBC will create metadata account automatically');
 
     const response: UploadResponse = {
       success: true,
@@ -130,7 +129,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       imageUrl,
       metadataUrl,
       mintAddress: mint,
-      message: `✅ Pool transaction ready! Meteora should create metadata account with name: ${tokenName}`,
+      message: `✅ Pool transaction ready! Meteora DBC will create metadata account with name: ${tokenName}`,
     };
 
     res.status(200).json(response);

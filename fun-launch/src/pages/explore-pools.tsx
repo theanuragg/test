@@ -37,6 +37,9 @@ export default function ExplorePoolsPage() {
           name: p.name,
           symbol: p.symbol,
           imageUrl: p.imageUrl,
+          description: p.description,
+          decimals: p.decimals,
+          supply: p.supply,
         })) as ExplorePoolItem[];
         return items.filter((i) => i.baseMint);
       } catch {
@@ -106,34 +109,38 @@ export default function ExplorePoolsPage() {
                         src={p.imageUrl}
                         alt={p.name || 'Token Logo'}
                         className="w-full h-full object-cover"
+                        loading="lazy"
                         onError={(e) => {
-                          // Try fallback extensions if primary fails
                           const target = e.target as HTMLImageElement;
                           const currentSrc = target.src;
                           
+                          // If it's already a placeholder, don't retry
+                          if (currentSrc.includes('via.placeholder.com')) {
+                            return;
+                          }
+                          
+                          // Try different extensions
                           if (currentSrc.includes('.jpeg')) {
-                            // Try .png
                             target.src = currentSrc.replace('.jpeg', '.png');
                           } else if (currentSrc.includes('.png')) {
-                            // Try .jpg
                             target.src = currentSrc.replace('.png', '.jpg');
                           } else if (currentSrc.includes('.jpg')) {
                             // All extensions failed, show placeholder
                             const parent = target.parentElement;
                             if (parent) {
-                              parent.innerHTML = '<div class="text-white/50 text-xs font-mono">TOKEN</div>';
+                              parent.innerHTML = `<div class="text-white/50 text-xs font-mono">${(p.symbol || 'T').charAt(0)}</div>`;
                             }
                           } else {
                             // Default fallback
                             const parent = target.parentElement;
                             if (parent) {
-                              parent.innerHTML = '<div class="text-white/50 text-xs font-mono">TOKEN</div>';
+                              parent.innerHTML = `<div class="text-white/50 text-xs font-mono">${(p.symbol || 'T').charAt(0)}</div>`;
                             }
                           }
                         }}
                       />
                     ) : (
-                      <div className="text-white/50 text-xs font-mono">TOKEN</div>
+                      <div className="text-white/50 text-xs font-mono">{p.symbol ? p.symbol.charAt(0) : 'T'}</div>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">

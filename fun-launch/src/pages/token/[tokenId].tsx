@@ -72,7 +72,8 @@ export default function TokenDetailPage() {
               image: data.tokenInfo?.imageUrl,
               description: data.tokenInfo?.description,
               external_url: null,
-            }
+            },
+            tokenInfo: data.tokenInfo // Store the full token info
           });
         } else {
           throw new Error(data.error || 'Failed to fetch token info');
@@ -345,29 +346,33 @@ export default function TokenDetailPage() {
             <div className="bg-white/5 rounded-xl p-6 backdrop-blur-sm border border-white/10">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 flex items-center justify-center">
-                    {tokenData?.info?.logoURI ? (
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 flex items-center justify-center overflow-hidden">
+                    {heliusData?.tokenInfo?.imageUrl ? (
                       <img 
-                        src={tokenData.info.logoURI} 
-                        alt={tokenData.info.name} 
-                        className="w-full h-full rounded-full object-cover"
+                        src={heliusData.tokenInfo.imageUrl} 
+                        alt={heliusData.tokenInfo.name || 'Token Logo'} 
+                        className="w-full h-full object-cover"
+                        loading="lazy"
                         onError={(e) => {
                           const target = e.target as HTMLImageElement;
-                          target.src = '/coins/unknown.svg';
+                          const parent = target.parentElement;
+                          if (parent) {
+                            parent.innerHTML = `<span class="text-white font-bold text-xl">${heliusData?.tokenInfo?.symbol?.charAt(0) || 'T'}</span>`;
+                          }
                         }}
                       />
                     ) : (
                       <span className="text-white font-bold text-xl">
-                        {tokenData?.info?.symbol?.charAt(0) || 'T'}
+                        {heliusData?.tokenInfo?.symbol?.charAt(0) || 'T'}
                       </span>
                     )}
                   </div>
                   <div>
                     <h1 className="text-3xl font-bold text-white">
-                      {tokenData?.info?.name || 'Loading Token...'}
+                      {heliusData?.tokenInfo?.name || 'Loading Token...'}
                     </h1>
                     <p className="text-gray-400">
-                      ${tokenData?.info?.symbol || 'TOKEN'} • Meteora DBC
+                      ${heliusData?.tokenInfo?.symbol || 'TOKEN'} • Meteora DBC
                     </p>
                   </div>
                 </div>
