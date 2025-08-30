@@ -70,7 +70,7 @@ export default function ExplorePoolsPage() {
         <meta name="description" content="Discover recent DBC pools" />
       </Head>
 
-      <div className="min-h-screen bg-gradient-to-b text-white">
+      <div className="min-h-screen bg-black text-white">
         <Header />
 
         <main className="container mx-auto px-4 py-10">
