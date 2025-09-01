@@ -7,6 +7,7 @@
 import React from 'react';
 import { TokenInfo as JupiterTokenInfo, TokenPrice } from '../../lib/jupiter/api-client';
 import { DbcPoolData } from '../../hooks/useDbcPool';
+import { formatMarketCap, formatPrice, formatPercentageChange, formatVolume } from '../../lib/format/market-cap';
 import { shortenAddress } from '../../lib/utils';
 
 interface TokenInfoProps {
@@ -82,7 +83,7 @@ export function TokenInfo({ token, price, dbcData }: TokenInfoProps) {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-400">Current Price</span>
                   <span className="text-sm text-white">
-                    ${price.price.toFixed(6)} USDC
+                    {formatPrice(price.price)} USDC
                   </span>
                 </div>
                 
@@ -91,27 +92,23 @@ export function TokenInfo({ token, price, dbcData }: TokenInfoProps) {
                   <span className={`text-sm font-medium ${
                     price.priceChange24h >= 0 ? 'text-green-400' : 'text-red-400'
                   }`}>
-                    {price.priceChange24h >= 0 ? '+' : ''}{price.priceChange24h.toFixed(2)}%
+                    {formatPercentageChange(price.priceChange24h)}
                   </span>
                 </div>
                 
-                {price.marketCap && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-400">Market Cap</span>
-                    <span className="text-sm text-white">
-                      ${price.marketCap.toLocaleString()}
-                    </span>
-                  </div>
-                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-400">Market Cap</span>
+                  <span className="text-sm text-white">
+                    {formatMarketCap(price.marketCap)}
+                  </span>
+                </div>
                 
-                {price.volume24h && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-400">24h Volume</span>
-                    <span className="text-sm text-white">
-                      ${price.volume24h.toLocaleString()}
-                    </span>
-                  </div>
-                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-400">24h Volume</span>
+                  <span className="text-sm text-white">
+                    {formatVolume(price.volume24h)}
+                  </span>
+                </div>
               </>
             )}
           </div>

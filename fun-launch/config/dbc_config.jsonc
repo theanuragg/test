@@ -14,9 +14,15 @@
   /* quoteMint is required for the following actions:
    * 1. dbc-create-config
    * 2. dbc-create-pool (if there is no configKeyAddress)
-   * SOL: So11111111111111111111111111111111111111112 | USDC: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v | JUP: JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN
+   * 
+   * USDC Mints:
+   * - Mainnet: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+   * - Devnet: Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr
+   * 
+   * SOL: So11111111111111111111111111111111111111112
+   * JUP: JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN
    */
-  "quoteMint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+  "quoteMint": "Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr", // Devnet USDC mint
 
   /* baseMint is required for the following actions:
    * 1. dbc-swap (Buy or Sell)

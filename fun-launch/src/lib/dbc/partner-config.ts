@@ -114,8 +114,8 @@ export function generatePartnerDbcConfig(
       // Build Curve Mode: 1 = buildCurveWithMarketCap (official Meteora mode)
       buildCurveMode: 1,
       
-      // Market Cap Configuration (in USD)
-      initialMarketCap: 5000, // $5K starting market cap
+      // Market Cap Configuration (in USD) - Virtual bonding curve parameters
+      initialMarketCap: 5000, // $5K virtual curve starting point (not actual market cap)
       migrationMarketCap: 75000, // $75K migration threshold
       
       // Token Supply: 1B tokens (standard for launchpads)

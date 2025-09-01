@@ -22,6 +22,8 @@ import { BondingCurveProgress } from '../../components/Token/BondingCurveProgres
 import { MigrationStatus } from '../../components/Token/MigrationStatus';
 import LaunchpadStatus from '../../components/Token/LaunchpadStatus';
 import DbcSwapInterface from '../../components/Token/DbcSwapInterface';
+import { EnhancedTokenChart } from '../../components/TokenChart/EnhancedTokenChart';
+import { formatMarketCap, formatPrice, formatVolume } from '../../lib/format/market-cap';
 
 export default function TokenDetailPage() {
   const router = useRouter();
@@ -378,40 +380,39 @@ export default function TokenDetailPage() {
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-white">
-                    ${tokenData?.price?.price?.toFixed(6) || '0.000000'}
+                    {formatPrice(tokenData?.price?.price)}
                   </div>
                   <div className="text-gray-400 text-sm">
-                    Market Cap: ${tokenData?.price?.marketCap?.toLocaleString() || '0'}
+                    Market Cap: {formatMarketCap(tokenData?.price?.marketCap)}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Price Chart Placeholder */}
-            <div className="bg-white/5 rounded-xl p-6 backdrop-blur-sm border border-white/10">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold">Price Chart</h2>
-                <div className="text-gray-400 text-sm">Jupiter APIs temporarily disabled</div>
-              </div>
-              <div className="h-64 bg-black/20 rounded-lg flex items-center justify-center">
-                <div className="text-center">
-                  <div className="text-gray-400 mb-2">📊 Chart Coming Soon</div>
-                  <div className="text-gray-500 text-sm">Price history will be available after Jupiter integration fix</div>
-                </div>
-              </div>
-            </div>
+            {/* Enhanced Price Chart */}
+            {tokenIdString && (
+              <EnhancedTokenChart
+                tokenAddress={tokenIdString}
+                poolAddress={dbcData?.poolAddress}
+                height={500}
+                showBondingCurve={true}
+                showTradingIndicators={true}
+                showVolumeProfile={true}
+                className="bg-white/5 rounded-xl p-6 backdrop-blur-sm border border-white/10"
+              />
+            )}
 
             {/* Key Metrics */}
             <MetricsGrid
               metrics={[
                 {
                   title: 'Market Cap',
-                  value: price?.marketCap ? `$${price.marketCap.toLocaleString()}` : '$0',
+                  value: formatMarketCap(price?.marketCap),
                   change: price?.priceChange24h,
                 },
                 {
                   title: 'Price',
-                  value: price?.price ? `$${price.price.toFixed(6)}` : 'N/A',
+                  value: formatPrice(price?.price),
                   change: price?.priceChange24h,
                 },
                 {
@@ -529,15 +530,15 @@ export default function TokenDetailPage() {
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
                           <span className="text-gray-400">Current Price:</span>
-                          <span className="text-white">${tokenData.price.price.toFixed(6)}</span>
+                          <span className="text-white">{formatPrice(tokenData.price.price)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-400">Market Cap:</span>
-                          <span className="text-white">${tokenData.price.marketCap.toLocaleString()}</span>
+                          <span className="text-white">{formatMarketCap(tokenData.price.marketCap)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-400">24h Volume:</span>
-                          <span className="text-white">${tokenData.price.volume24h.toLocaleString()}</span>
+                          <span className="text-white">{formatVolume(tokenData.price.volume24h)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-400">Data Source:</span>

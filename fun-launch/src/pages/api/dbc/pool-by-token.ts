@@ -230,7 +230,8 @@ export default async function handler(
     const poolData = {
       poolAddress,
       baseMint: poolState?.baseMint?.toString() || '',
-      quoteMint: poolConfig?.quoteMint?.toString() || '',
+      // Force correct devnet USDC mint - DBC pool might be configured with wrong mint
+      quoteMint: 'Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr',
       currentPrice: formattedCurrentPrice,
       marketCap: formattedMarketCap,
       volume24h: 0, // TODO: Calculate from recent transactions

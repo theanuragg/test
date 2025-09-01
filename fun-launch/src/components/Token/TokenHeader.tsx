@@ -7,6 +7,7 @@
 import React from 'react';
 import { TokenInfo, TokenPrice } from '../../lib/jupiter/api-client';
 import { shortenAddress } from '../../lib/utils';
+import { formatMarketCap, formatPrice, formatPercentageChange } from '../../lib/format/market-cap';
 
 interface TokenHeaderProps {
   token: TokenInfo | null;
@@ -135,20 +136,18 @@ export function TokenHeader({ token, price, isVerified, onMenuClick }: TokenHead
           {price ? (
             <>
               <div className="text-3xl font-bold text-white mb-1">
-                ${price.price.toFixed(6)}
+                {formatPrice(price.price)}
               </div>
               <div className={`flex items-center justify-end space-x-2 text-sm ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
                 <svg className={`w-4 h-4 ${isPositive ? 'rotate-0' : 'rotate-180'}`} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M5.293 7.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 5.414V17a1 1 0 11-2 0V5.414L6.707 7.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
                 </svg>
-                <span>{Math.abs(priceChange).toFixed(2)}%</span>
+                <span>{formatPercentageChange(priceChange).replace(/[+%-]/g, '')}%</span>
                 <span className="text-gray-400">24h</span>
               </div>
-              {price.marketCap && (
-                <div className="text-gray-400 text-sm mt-1">
-                  MC: ${price.marketCap.toLocaleString()}
-                </div>
-              )}
+              <div className="text-gray-400 text-sm mt-1">
+                MC: {formatMarketCap(price.marketCap)}
+              </div>
             </>
           ) : (
             <div className="text-gray-400 text-sm">Price unavailable</div>

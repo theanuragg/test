@@ -11,7 +11,8 @@
     "start": "next start",
     "lint": "next lint",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "generate-dbc-config": "tsx scripts/generate-dbc-config.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",
@@ -87,6 +88,7 @@
     "postcss": "^8.5.3",
     "prettier": "^3.6.2",
     "tailwindcss": "^3.3.1",
+    "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   }
 }

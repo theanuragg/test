@@ -59,7 +59,7 @@ export default async function handler(
       tokenDescription,
       tokenImage,
       initialSupply = 1000000000, // 1B tokens
-      initialMarketCap = 5000, // $5K
+      initialMarketCap = 5000, // $5K virtual curve baseline
       migrationMarketCap = 75000, // $75K
       userWallet,
       network = 'devnet',
