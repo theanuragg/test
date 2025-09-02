@@ -1,8 +1,8 @@
 export const HELIUS_CONFIG = {
   // Helius RPC endpoints
-  RPC_URL: process.env.NEXT_PUBLIC_HELIUS_RPC_URL || 'https://rpc.helius.xyz/?api-key=your-api-key',
-  WS_URL: process.env.NEXT_PUBLIC_HELIUS_WS_URL || 'wss://rpc.helius.xyz/?api-key=your-api-key',
-  API_KEY: process.env.NEXT_PUBLIC_HELIUS_API_KEY || 'your-api-key',
+  RPC_URL: process.env.NEXT_PUBLIC_HELIUS_RPC_URL || 'https://api.devnet.solana.com',
+  WS_URL: process.env.NEXT_PUBLIC_HELIUS_WS_URL || 'wss://api.devnet.solana.com',
+  API_KEY: process.env.NEXT_PUBLIC_HELIUS_API_KEY || '',
   
   // WebSocket configuration
   WS_RECONNECT_ATTEMPTS: 5,

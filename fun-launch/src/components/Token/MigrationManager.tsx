@@ -41,12 +41,19 @@ export const MigrationManager: React.FC<MigrationManagerProps> = ({
     // Import and initialize migration stream service
     const initializeMigrationStream = async () => {
       try {
+        // Check if Helius is properly configured
+        const { isHeliusEnabled } = await import('../../lib/config/helius-config');
+        if (!isHeliusEnabled()) {
+          console.warn('⚠️ Helius not configured, using polling fallback');
+          return startPollingFallback();
+        }
+
         const { MigrationStreamService } = await import('../../lib/helius/migration-stream');
         
         const migrationStream = new MigrationStreamService({
-          heliusRpcUrl: process.env.NEXT_PUBLIC_HELIUS_RPC_URL || 'https://rpc.helius.xyz/?api-key=your-api-key',
-          heliusWsUrl: process.env.NEXT_PUBLIC_HELIUS_WS_URL || 'wss://rpc.helius.xyz/?api-key=your-api-key',
-          heliusApiKey: process.env.NEXT_PUBLIC_HELIUS_API_KEY || 'your-api-key',
+          heliusRpcUrl: process.env.NEXT_PUBLIC_HELIUS_RPC_URL || 'https://api.devnet.solana.com',
+          heliusWsUrl: process.env.NEXT_PUBLIC_HELIUS_WS_URL || 'wss://api.devnet.solana.com',
+          heliusApiKey: process.env.NEXT_PUBLIC_HELIUS_API_KEY || '',
           onMigrationReady: async (poolAddr, poolData) => {
             if (poolAddr === poolAddress) {
               console.log('🎯 Pool ready for migration - auto-triggering...');

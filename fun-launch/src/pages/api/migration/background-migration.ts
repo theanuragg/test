@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Connection, PublicKey } from '@solana/web3.js';
-import { DbcClient } from '@meteora-ag/dynamic-bonding-curve-sdk';
+import { DynamicBondingCurveClient } from '@meteora-ag/dynamic-bonding-curve-sdk';
 
 // This endpoint can be called by cron jobs or webhooks to automatically migrate pools
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -37,10 +37,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const connection = new Connection(process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com', 'confirmed');
     
     // Initialize DBC client
-    const dbcClient = new DbcClient(connection);
+    const dbcClient = new DynamicBondingCurveClient(connection, 'confirmed');
 
     // Check if pool is ready for migration
-    const poolState = await dbcClient.state.getPoolState(poolPublicKey);
+    const poolState = await dbcClient.state.getPool(poolPublicKey);
     if (!poolState) {
       return res.status(404).json({ error: 'Pool not found' });
     }
@@ -52,7 +52,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Check if pool is ready for migration
-    const currentQuoteReserves = (poolState as any).quoteReserves?.toNumber() || 0;
+    const currentQuoteReserves = (poolState.account as any).quoteReserves?.toNumber() || 0;
     const migrationThreshold = poolConfig.migrationQuoteThreshold?.toNumber() || 0;
     
     if (currentQuoteReserves < migrationThreshold) {
@@ -65,7 +65,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Check if already migrated
-    if ((poolState as any).isMigrated) {
+    if ((poolState.account as any).isMigrated) {
       return res.status(400).json({ error: 'Pool already migrated' });
     }
 

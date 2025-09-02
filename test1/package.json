@@ -12,13 +12,13 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "build": "next build",
+    "build": "node init && next build",
     "ci": "npm run build && npm run lint && npm run format:check",
-    "dev": "next dev --turbopack",
+    "dev": "node init && next dev --turbopack",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "next lint",
-    "start": "next start"
+    "start": "node init && next start"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",
