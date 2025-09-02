@@ -85,6 +85,17 @@ export function TradingInterface({
       // Send the transaction
       // This would typically be sent to the network
       toast.success('Swap transaction signed successfully!');
+
+      // Dispatch trade event to trigger market data refresh
+      console.log('🔄 Dispatching trade event for Jupiter swap...');
+      window.dispatchEvent(new CustomEvent('trade-executed', {
+        detail: {
+          poolAddress: 'jupiter-swap',
+          amount: parseFloat(amount),
+          isBuying: tradeDirection === 'buy',
+          tokenSymbol: tokenInfo?.symbol || 'TOKEN'
+        }
+      }));
     } catch (error) {
       console.error('Error executing swap:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to execute swap');

@@ -719,6 +719,17 @@ export default function DbcSwapInterface({
         `Successfully ${isBuying ? 'bought' : 'sold'} ${parseFloat(amount).toFixed(2)} ${isBuying ? tokenSymbol : 'USDC'}!`
       );
 
+      // Dispatch trade event to trigger market data refresh
+      console.log('🔄 Dispatching trade event...');
+      window.dispatchEvent(new CustomEvent('trade-executed', {
+        detail: {
+          poolAddress,
+          amount: parseFloat(amount),
+          isBuying,
+          tokenSymbol
+        }
+      }));
+
       // Reset form
       setAmount('');
       setQuote(null);

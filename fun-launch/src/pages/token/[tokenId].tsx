@@ -23,6 +23,8 @@ import { MigrationStatus } from '../../components/Token/MigrationStatus';
 import LaunchpadStatus from '../../components/Token/LaunchpadStatus';
 import DbcSwapInterface from '../../components/Token/DbcSwapInterface';
 import { EnhancedTokenChart } from '../../components/TokenChart/EnhancedTokenChart';
+import { RealTimeMarketData } from '../../components/Token/RealTimeMarketData';
+import { RealTimeTrades } from '../../components/Token/RealTimeTrades';
 import { formatMarketCap, formatPrice, formatVolume } from '../../lib/format/market-cap';
 
 export default function TokenDetailPage() {
@@ -467,6 +469,26 @@ export default function TokenDetailPage() {
                 quoteMint={dbcData.quoteMint || 'Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr'} // Devnet USDC
                 tokenName={tokenData?.info?.name || 'Unknown Token'}
                 tokenSymbol={tokenData?.info?.symbol || 'UNKNOWN'}
+              />
+            )}
+
+            {/* Real-Time Market Data */}
+            {dbcData?.poolAddress && (
+              <RealTimeMarketData
+                poolAddress={dbcData.poolAddress}
+                baseMint={dbcData.baseMint || tokenIdString}
+                quoteMint={dbcData.quoteMint || 'Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr'}
+                tokenDecimals={tokenData?.info?.decimals || 9}
+                quoteDecimals={6}
+              />
+            )}
+
+            {/* Real-Time Trades */}
+            {dbcData?.poolAddress && (
+              <RealTimeTrades
+                poolAddress={dbcData.poolAddress}
+                baseMint={dbcData.baseMint || tokenIdString}
+                quoteMint={dbcData.quoteMint || 'Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr'}
               />
             )}
 

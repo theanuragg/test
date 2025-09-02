@@ -76,32 +76,48 @@ export const EnhancedTokenChart: React.FC<EnhancedTokenChartProps> = ({
 
   // Use real-time data hook
   const {
-    priceData,
-    bondingCurveData,
-    recentTrades,
-    chartData,
-    isConnected,
-    isLoading,
+    marketData,
+    loading: isLoading,
     error,
+    isConnected,
     refreshData,
-    fetchChartData,
   } = useRealTimeData({
-    tokenAddress,
-    poolAddress,
-    autoConnect: true,
-    enableTrades: showTradingIndicators,
-    enableBondingCurve: showBondingCurve,
-    enablePriceUpdates: true,
+    poolAddress: poolAddress || '',
+    baseMint: tokenAddress,
+    quoteMint: 'Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr', // Devnet USDC
+    tokenDecimals: 9,
+    quoteDecimals: 6,
+    updateInterval: 15000,
   });
+
+  // Extract data from marketData
+  const priceData = marketData ? {
+    price: marketData.price,
+    priceChange24h: 0, // We'll calculate this later
+  } : null;
+
+  const bondingCurveData = marketData ? {
+    currentPrice: marketData.price,
+    progress: marketData.bondingCurveProgress,
+    timeToGraduation: null, // We'll calculate this later
+  } : null;
+
+  // For now, we'll use an empty array for recent trades
+  // This will be populated by the RealTimeTrades component
+  const recentTrades: any[] = [];
 
   // Convert recent trades to trading indicators
   const tradingIndicators: TradingIndicator[] = useMemo(() => {
+    if (!recentTrades || !Array.isArray(recentTrades)) {
+      return [];
+    }
+    
     return recentTrades.slice(0, 10).map(trade => ({
-      type: trade.type,
-      price: trade.price,
-      volume: trade.amount,
-      timestamp: trade.timestamp,
-      traderAddress: trade.traderAddress,
+      type: trade.type || 'neutral',
+      price: trade.price || 0,
+      volume: trade.amount || 0,
+      timestamp: trade.timestamp || Date.now(),
+      traderAddress: trade.traderAddress || '',
     }));
   }, [recentTrades]);
 
@@ -131,7 +147,7 @@ export const EnhancedTokenChart: React.FC<EnhancedTokenChartProps> = ({
               <h3 className="text-lg font-semibold text-white">Token Price</h3>
               <div className="flex items-center space-x-2">
                 <span className="text-2xl font-bold text-white">
-                  ${priceData?.price.toFixed(6) || bondingCurveData?.currentPrice.toFixed(6) || '0.000000'}
+                  ${(priceData?.price || bondingCurveData?.currentPrice || 0).toFixed(6)}
                 </span>
                 <div className={cn(
                   'flex items-center space-x-1 text-sm',
@@ -177,12 +193,12 @@ export const EnhancedTokenChart: React.FC<EnhancedTokenChartProps> = ({
             <div className="text-right">
               <div className="text-sm text-gray-400">Bonding Curve Progress</div>
               <div className="text-lg font-semibold text-white">
-                {bondingCurveData.progress.toFixed(1)}%
+                {(bondingCurveData.progress || 0).toFixed(1)}%
               </div>
               <div className="w-32 h-2 bg-neutral-700 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-gradient-to-r from-green-400 to-green-600 transition-all duration-300"
-                  style={{ width: `${bondingCurveData.progress}%` }}
+                  style={{ width: `${bondingCurveData.progress || 0}%` }}
                 />
               </div>
               {bondingCurveData.timeToGraduation && (
@@ -326,7 +342,7 @@ export const EnhancedTokenChart: React.FC<EnhancedTokenChartProps> = ({
             <span className="text-sm text-gray-400">24h Volume</span>
           </div>
           <div className="text-lg font-semibold text-white mt-1">
-            {formatVolume(priceData?.volume24h || Math.random() * 50000)}
+            {formatVolume(marketData?.volume24h || 0)}
           </div>
         </Card>
 
@@ -336,7 +352,7 @@ export const EnhancedTokenChart: React.FC<EnhancedTokenChartProps> = ({
             <span className="text-sm text-gray-400">Remaining</span>
           </div>
           <div className="text-lg font-semibold text-white mt-1">
-            {bondingCurveData?.remainingTokens.toLocaleString() || '0'}
+            {(marketData?.totalSupply || 0).toLocaleString()}
           </div>
         </Card>
       </div>
