@@ -25,6 +25,7 @@ import DbcSwapInterface from '../../components/Token/DbcSwapInterface';
 import { EnhancedTokenChart } from '../../components/TokenChart/EnhancedTokenChart';
 import { RealTimeMarketData } from '../../components/Token/RealTimeMarketData';
 import { RealTimeTrades } from '../../components/Token/RealTimeTrades';
+import { MigrationManager } from '../../components/Token/MigrationManager';
 import { formatMarketCap, formatPrice, formatVolume } from '../../lib/format/market-cap';
 
 export default function TokenDetailPage() {
@@ -460,6 +461,19 @@ export default function TokenDetailPage() {
                 tokenMint={tokenId as string}
               />
             </div>
+
+            {/* Migration Manager - Automatic DAMM v2 Migration */}
+            {dbcData?.poolAddress && (
+              <MigrationManager
+                poolAddress={dbcData.poolAddress}
+                onMigrationComplete={() => {
+                  // Refresh DBC data after migration
+                  console.log('🔄 Migration completed, refreshing data...');
+                  // You can add logic here to refresh the page or specific data
+                  window.location.reload();
+                }}
+              />
+            )}
 
             {/* DBC Swap Interface */}
             {publicKey && dbcData?.poolAddress && (

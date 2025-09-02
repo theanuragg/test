@@ -25,6 +25,12 @@ export const Header = () => {
 
       {/* Navigation and Actions */}
       <div className="flex items-center gap-4">
+        <Link 
+          href="/migration-dashboard" 
+          className="px-4 py-2 text-white hover:text-blue-300 transition-colors"
+        >
+          Migration Dashboard
+        </Link>
         <CreatePoolButton />
         {address ? (
           <Button onClick={() => disconnect()}>{shortenAddress(address)}</Button>

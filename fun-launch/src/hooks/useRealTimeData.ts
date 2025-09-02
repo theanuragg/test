@@ -221,7 +221,7 @@ export function useRealTimeData(config: RealTimeDataConfig) {
       
       wsConnectionRef.current.onopen = () => {
         console.log('✅ WebSocket connected for real-time updates');
-        setIsConnected(true);
+      setIsConnected(true);
         
         // Wait a moment to ensure connection is fully established
         setTimeout(() => {
@@ -293,8 +293,8 @@ export function useRealTimeData(config: RealTimeDataConfig) {
 
       wsConnectionRef.current.onerror = (error) => {
         console.error('❌ WebSocket error:', error);
-        setIsConnected(false);
-      };
+      setIsConnected(false);
+    };
 
       wsConnectionRef.current.onclose = (event) => {
         console.log('🔌 WebSocket disconnected:', event.code, event.reason);
@@ -335,7 +335,7 @@ export function useRealTimeData(config: RealTimeDataConfig) {
       } catch (error) {
         console.error('❌ Polling error:', error);
       }
-    }, config.updateInterval || 30000); // Default 30 seconds
+    }, config.updateInterval || 5000); // Default 5 seconds for real-time updates
   }, [calculateMarketData, config.updateInterval]);
 
   // Initialize and start monitoring
