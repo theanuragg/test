@@ -1,5 +1,5 @@
 import { Connection, PublicKey } from '@solana/web3.js';
-import { DbcClient } from '@meteora-ag/dynamic-bonding-curve-sdk';
+import { DynamicBondingCurveClient } from '@meteora-ag/dynamic-bonding-curve-sdk';
 
 export interface MigrationStreamConfig {
   heliusRpcUrl: string;
@@ -25,7 +25,7 @@ export interface PoolMigrationStatus {
 
 export class MigrationStreamService {
   private connection: Connection;
-  private dbcClient: DbcClient;
+  private dbcClient: DynamicBondingCurveClient;
   private wsConnection: WebSocket | null = null;
   private poolSubscriptions = new Map<string, any>();
   private migrationStatus = new Map<string, PoolMigrationStatus>();
@@ -38,7 +38,7 @@ export class MigrationStreamService {
   constructor(config: MigrationStreamConfig) {
     this.config = config;
     this.connection = new Connection(config.heliusRpcUrl, 'confirmed');
-    this.dbcClient = new DbcClient(this.connection);
+    this.dbcClient = new DynamicBondingCurveClient(this.connection);
   }
 
   /**
@@ -67,6 +67,14 @@ export class MigrationStreamService {
   private async connectWebSocket() {
     return new Promise<void>((resolve, reject) => {
       try {
+        // Check if WebSocket is available (browser environment)
+        if (typeof WebSocket === 'undefined') {
+          console.warn('⚠️ WebSocket not available, skipping WebSocket connection');
+          this.isConnected = true; // Mark as connected to avoid reconnection attempts
+          resolve();
+          return;
+        }
+
         this.wsConnection = new WebSocket(this.config.heliusWsUrl);
         
         this.wsConnection.onopen = () => {
@@ -268,17 +276,28 @@ export class MigrationStreamService {
       const poolPublicKey = new PublicKey(poolAddress);
       
       // Get pool state
-      const poolState = await this.dbcClient.state.getPoolState(poolPublicKey);
-      if (!poolState) return null;
+      const poolState = await this.dbcClient.state.getPool(poolPublicKey);
+      if (!poolState) {
+        console.warn(`⚠️ Pool state not found for pool ${poolAddress}`);
+        return null;
+      }
 
       // Get pool config
       const poolConfig = await this.dbcClient.state.getPoolConfig(poolState.config);
-      if (!poolConfig) return null;
+      if (!poolConfig) {
+        console.warn(`⚠️ Pool config not found for pool ${poolAddress}`);
+        return null;
+      }
 
       // Calculate migration status
-      const currentQuoteReserves = (poolState as any).quoteReserves?.toNumber() || 0;
+      if (!poolState.account) {
+        console.warn(`⚠️ Pool state account not found for pool ${poolAddress}`);
+        return null;
+      }
+
+      const currentQuoteReserves = (poolState.account as any).quoteReserves?.toNumber() || 0;
       const migrationThreshold = poolConfig.migrationQuoteThreshold?.toNumber() || 0;
-      const isMigrated = (poolState as any).isMigrated || false;
+      const isMigrated = (poolState.account as any).isMigrated || false;
       
       const migrationProgress = migrationThreshold > 0 
         ? Math.min((currentQuoteReserves / migrationThreshold) * 100, 100)
@@ -320,6 +339,12 @@ export class MigrationStreamService {
     try {
       console.log(`🚀 Auto-triggering migration for pool ${poolAddress}...`);
       
+      // Check if fetch is available (browser environment)
+      if (typeof fetch === 'undefined') {
+        console.warn('⚠️ Fetch API not available, skipping auto-migration');
+        return;
+      }
+      
       // Call your migration API
       const response = await fetch('/api/migration/background-migration', {
         method: 'POST',
@@ -347,6 +372,12 @@ export class MigrationStreamService {
   private async getAllPools(): Promise<any[]> {
     // This should call your existing pools API
     try {
+      // Check if fetch is available (browser environment)
+      if (typeof fetch === 'undefined') {
+        console.warn('⚠️ Fetch API not available, returning empty pools list');
+        return [];
+      }
+      
       const response = await fetch('/api/pools/list', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -388,14 +419,18 @@ export class MigrationStreamService {
       console.log('🛑 Stopping migration stream...');
       
       // Close WebSocket connection
-      if (this.wsConnection) {
+      if (this.wsConnection && typeof this.wsConnection.close === 'function') {
         this.wsConnection.close();
         this.wsConnection = null;
       }
       
       // Remove all account change listeners
       for (const [poolAddress, subscription] of this.poolSubscriptions) {
-        await this.connection.removeAccountChangeListener(subscription);
+        try {
+          await this.connection.removeAccountChangeListener(subscription);
+        } catch (error) {
+          console.warn(`⚠️ Error removing account change listener for pool ${poolAddress}:`, error);
+        }
       }
       
       this.poolSubscriptions.clear();

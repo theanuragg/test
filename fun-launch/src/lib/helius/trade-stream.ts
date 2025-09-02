@@ -76,6 +76,14 @@ export class TradeStreamService {
   private async connectWebSocket() {
     return new Promise<void>((resolve, reject) => {
       try {
+        // Check if WebSocket is available (browser environment)
+        if (typeof WebSocket === 'undefined') {
+          console.warn('⚠️ WebSocket not available, skipping WebSocket connection');
+          this.isConnected = true; // Mark as connected to avoid reconnection attempts
+          resolve();
+          return;
+        }
+
         this.wsConnection = new WebSocket(this.config.heliusWsUrl);
         
         this.wsConnection.onopen = () => {
@@ -456,6 +464,12 @@ export class TradeStreamService {
    */
   private async getAllPools(): Promise<any[]> {
     try {
+      // Check if fetch is available (browser environment)
+      if (typeof fetch === 'undefined') {
+        console.warn('⚠️ Fetch API not available, returning empty pools list');
+        return [];
+      }
+      
       const response = await fetch('/api/pools/list', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -497,14 +511,18 @@ export class TradeStreamService {
       console.log('🛑 Stopping trade stream...');
       
       // Close WebSocket connection
-      if (this.wsConnection) {
+      if (this.wsConnection && typeof this.wsConnection.close === 'function') {
         this.wsConnection.close();
         this.wsConnection = null;
       }
       
       // Remove all account change listeners
       for (const [poolAddress, subscription] of this.poolSubscriptions) {
-        await this.connection.removeAccountChangeListener(subscription);
+        try {
+          await this.connection.removeAccountChangeListener(subscription);
+        } catch (error) {
+          console.warn(`⚠️ Error removing account change listener for pool ${poolAddress}:`, error);
+        }
       }
       
       this.poolSubscriptions.clear();

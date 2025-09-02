@@ -34,31 +34,56 @@ interface TokenInfoResponse {
  * Check if a token image exists in R2 storage
  */
 async function checkR2Image(tokenMint: string): Promise<string | null> {
-  if (!R2_PUBLIC_URL) return null;
+  if (!R2_PUBLIC_URL) {
+    console.warn('⚠️ R2_PUBLIC_URL not configured, skipping R2 image check');
+    return null;
+  }
   
   try {
-    // Try different image formats
+    console.log(`🔍 Checking R2 storage for token: ${tokenMint}`);
+    console.log(`🔗 R2 base URL: ${R2_PUBLIC_URL}`);
+    
+    // Try different image formats with timeout
     const imageFormats = ['png', 'jpg', 'jpeg', 'svg'];
     
     for (const format of imageFormats) {
       const imageUrl = `${R2_PUBLIC_URL}/tokens/${tokenMint}.${format}`;
       
       try {
-        const response = await fetch(imageUrl, { method: 'HEAD' });
+        console.log(`🔍 Checking format: ${format} at ${imageUrl}`);
+        
+        // Create AbortController for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+        
+        const response = await fetch(imageUrl, { 
+          method: 'HEAD',
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
         if (response.ok) {
           console.log(`🖼️ Found R2 image for ${tokenMint}: ${imageUrl}`);
           return imageUrl;
+        } else {
+          console.log(`ℹ️ R2 image not found for ${tokenMint}.${format}: ${response.status}`);
         }
       } catch (e) {
+        if (e.name === 'AbortError') {
+          console.log(`⏰ R2 image check timed out for ${tokenMint}.${format}`);
+        } else {
+          console.log(`ℹ️ R2 image check failed for ${tokenMint}.${format}:`, e.message);
+        }
         // Continue to next format
         continue;
       }
     }
     
-    console.log(`ℹ️ No R2 image found for ${tokenMint}`);
+    console.log(`ℹ️ No R2 image found for ${tokenMint} in any format`);
     return null;
   } catch (error) {
-    console.warn(`Error checking R2 image for ${tokenMint}:`, error);
+    console.warn(`❌ Error checking R2 image for ${tokenMint}:`, error);
     return null;
   }
 }
@@ -87,7 +112,10 @@ export default async function handler(
     }
 
     console.log('🔍 Fetching comprehensive token info for:', mintAddress);
-    console.log('R2_PUBLIC_URL:', R2_PUBLIC_URL);
+    console.log('🔧 Configuration:');
+    console.log('  - RPC_URL:', RPC_URL);
+    console.log('  - R2_PUBLIC_URL:', R2_PUBLIC_URL || 'NOT SET');
+    console.log('  - Environment:', process.env.NODE_ENV);
 
     const connection = new Connection(RPC_URL, 'confirmed');
     const mintPublicKey = new PublicKey(mintAddress);
@@ -171,11 +199,23 @@ export default async function handler(
     let imageUrl: string | undefined;
     let description: string | undefined;
 
-    // 1. Try to fetch JSON metadata if URI exists
+    // 1. Try to fetch JSON metadata if URI exists (with timeout)
     if (parsedMetadata.uri) {
       try {
         console.log('🔗 Fetching JSON metadata from:', parsedMetadata.uri);
-        const metadataResponse = await fetch(parsedMetadata.uri);
+        
+        // Create AbortController for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+        
+        const metadataResponse = await fetch(parsedMetadata.uri, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; TokenInfo/1.0)'
+          }
+        });
+        
+        clearTimeout(timeoutId);
         
         if (metadataResponse.ok) {
           const jsonMetadata = await metadataResponse.json();
@@ -186,7 +226,11 @@ export default async function handler(
           console.log('⚠️ JSON metadata not accessible:', metadataResponse.status);
         }
       } catch (jsonError) {
-        console.warn('⚠️ Failed to fetch JSON metadata:', jsonError);
+        if (jsonError.name === 'AbortError') {
+          console.warn('⏰ JSON metadata fetch timed out, skipping...');
+        } else {
+          console.warn('⚠️ Failed to fetch JSON metadata:', jsonError);
+        }
       }
     }
 
